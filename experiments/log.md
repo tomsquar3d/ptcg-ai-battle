@@ -100,3 +100,50 @@ sample: turn=3 MAIN(1-1 of 9)  me active='Snover' bench=0 hand=7 deck=45 prizes=
   rarer contexts so they're not only exercised by chance.
 - Next Belief work: hidden-zone tracker + hypergeometric draw model; and the week-1
   `search_step` speed benchmark (still outstanding — gates lookahead depth).
+
+---
+
+## #3 — `search_step` speed benchmark (native Search API)
+
+**Date:** 2026-07-06
+**Code:** `scripts/search_step_benchmark.py`
+
+### Goal
+Resolve the week-1 unknown (§8/§9 item 4): how fast is one engine state transition via
+the native lookahead API (`search_begin`/`search_step`/`search_end`)? This number gates
+how deep the critical-turn search (§3, Layer 5) can go within a per-move time budget.
+
+### Method
+Drive random self-play to a mid-game decision, capture that agent observation (carries
+`search_begin_input`), then `search_begin()` a determinized tree and roll out random legal
+lines with `search_step()`, timing each. In self-play both full 60-card decklists are known,
+so each decklist is handed to the engine as the candidate pool for the hidden zones
+(deck/prize/hand). `search_end()` between rollouts keeps memory bounded.
+
+### Result (5000 steps; WSL2 **aarch64**, single-thread, `libcg-arm64.so`)
+```
+search_begin : 71 calls,  mean 0.249 ms,  median 0.211 ms
+search_step  : 5000 samples, 0 errors
+  mean 124.0 us | median 109.3 us | p95 203 us | p99 410 us | max 9.7 ms
+  throughput ~8,065 steps/sec (single core)
+rollout depth to terminal: mean ~71 steps  ->  ~114 full random games/sec
+```
+Budget translation: ~4k transitions per 0.5 s, ~8k per 1 s, ~24k per 3 s (single core).
+
+### Takeaways
+- **Lookahead is comfortably affordable.** At ~8k steps/sec/core (≈16k on the Kaggle 2-vCPU
+  box), a sub-second slice of the 600 s clock explores thousands of states — MCTS-style
+  critical-turn search and belief-sampled determinization (§9 Monte Carlo uses #2/#3) are
+  well within budget. The step-speed gate is **not** a constraint on depth.
+- **`search_begin` is cheap (~0.2 ms)** → re-determinizing per Monte Carlo sample (draw a
+  fresh opponent hand from the belief distribution each rollout) costs almost nothing.
+- **Tail to watch:** p99 ~410 us and rare ~10 ms transitions (heavy resolutions — attacks /
+  reshuffles / end-of-turn). Any fixed-node search budget must be wall-clock-checked, not
+  step-count-checked, so a cluster of heavy transitions can't blow the per-move clock.
+
+### Caveats
+- Measured single-thread on aarch64 WSL; Kaggle is x86 / 2 vCPU — treat as order-of-magnitude,
+  not absolute. Re-run on the target image when available.
+- Random rollouts under-sample expensive lines (few big attacks in a random mirror); real
+  search will weight toward combat, so expect the effective mean above 124 us. Direction and
+  magnitude hold: depth is not step-speed-limited.
