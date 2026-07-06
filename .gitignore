@@ -1,0 +1,43 @@
+# --- Competition data (LICENSE: must NEVER be committed; delete after competition) ---
+# Card CSVs, ID lists, replays, the vendored engine source, and downloaded exports all live here.
+data/
+
+# Archives / submission bundles
+*.tar.gz
+*.tgz
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Model checkpoints / weights
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+*.pkl
+*.pickle
+*.npz
+*.safetensors
+checkpoints/
+
+# Competition-provided native engine libraries (the compiled "cabt" engine).
+# Licensed for competition use only — must NOT be committed/republished, and the
+# winning repo is delivered open-source. They stay on disk for local testing and
+# submission bundling; copy them from the official SDK into submissions/vN/cg/.
+cg.dll
+libcg*.so
+libcg*.dylib
+
+# Local / editor / OS
+.claude/
+.obsidian/
+.DS_Store
+.ipynb_checkpoints/
+kaggle.json
