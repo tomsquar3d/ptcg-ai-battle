@@ -33,6 +33,32 @@ from typing import Any, Callable, Iterable, Mapping, Optional, Union
 
 Targets = Union[int, Iterable[int], Callable[[int], bool]]
 
+def hyper_at_least(n: int, K: int, draws: int, m: int = 1) -> float:
+    """Hypergeometric tail: P(at least m successes) when drawing `draws` items, without
+    replacement, from a pool of `n` items containing `K` successes.
+
+    Shared by the own-deck draw model and the opponent hidden-zone model (both are "draw a
+    subset from a known-size pool"). `draws` is clamped to `n`.
+    """
+    if m <= 0:
+        return 1.0
+    if n <= 0 or draws <= 0 or K < m:
+        return 0.0
+    draws = min(draws, n)
+    if m == 1:  # complement is cheaper and more stable
+        if n - K < draws:
+            return 1.0
+        return 1.0 - comb(n - K, draws) / comb(n, draws)
+    total = comb(n, draws)
+    acc = 0
+    for i in range(m, min(draws, K) + 1):
+        rest = draws - i
+        if rest < 0 or n - K < rest:
+            continue
+        acc += comb(K, i) * comb(n - K, rest)
+    return acc / total
+
+
 # AreaType values (mirrors cg.api.AreaType) used when reading the log stream.
 _AREA_ACTIVE = 4
 _AREA_BENCH = 5
@@ -125,27 +151,7 @@ class DrawModel:
 
     def prob_at_least(self, target: Targets, k: int = 1, m: int = 1) -> float:
         """P(at least m copies of target among the next k draws)."""
-        n = self.n
-        K = self.copies(target)
-        d = self._draws(k)
-        if m <= 0:
-            return 1.0
-        if n <= 0 or d <= 0 or K < m:
-            return 0.0
-        # P(X >= 1) via complement for stability.
-        if m == 1:
-            if n - K < d:
-                return 1.0
-            return 1.0 - comb(n - K, d) / comb(n, d)
-        total = comb(n, d)
-        hi = min(d, K)
-        acc = 0
-        for i in range(m, hi + 1):
-            rest = d - i
-            if rest < 0 or n - K < rest:
-                continue
-            acc += comb(K, i) * comb(n - K, rest)
-        return acc / total
+        return hyper_at_least(self.n, self.copies(target), self._draws(k), m)
 
     def prob_draw(self, target: Targets, k: int = 1) -> float:
         """P(at least one copy of target among the next k draws)."""

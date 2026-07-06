@@ -202,3 +202,52 @@ sample: 50 hidden (44 deck+6 prize) | P(Basic,1)=0.08 | P(energy,2)=0.845 |
   the `BeliefState.opponent` placeholder.
 - Deck-quality metric = E[usefulness of next k draws] via this tracker (needs per-card
   situational usefulness scoring — pairs with the heuristic evaluator).
+
+---
+
+## #5 — Belief Engine Layer 2b: opponent model (`src/ptcg/opponent.py`)
+
+**Date:** 2026-07-06
+**Code:** `src/ptcg/opponent.py`, `scripts/opponent_smoke.py`; refactor `belief.hyper_at_least`
+
+### Goal
+§4 "opponent prediction → a distribution." Three layers, most-exact first.
+
+### What was built
+1. **`OpponentTracker` + `opponent_visible_cards`** — the exact, priors-free *evidence*: the
+   multiset of opponent cards we've legitimately seen. Identity is harvested only from visible
+   zones (their board + attachments, discard, stadium), where physical location proves
+   ownership; deduped by serial and accumulated → monotonic knowledge of their decklist.
+2. **`OpponentZoneModel`** — given a predicted decklist *template*, `pool = template − visible`
+   is their hidden cards; by exchangeability, `prob_in_hand` / `prob_draw_next` / `prob_prized`
+   are hypergeometric over the pool (reuses `belief.hyper_at_least`, extracted in a refactor).
+   Feeds the threat model and the determinization sampler.
+3. **`Archetype` + `classify_archetype`** — Bayesian archetype posterior (naive multinomial
+   bag-of-cards, additive smoothing). Framework + tests only; real templates and meta-share
+   priors come from replay mining (§5). `build_opponent_belief` composes all three into
+   `OpponentBelief` (the `BeliefState.opponent` slot).
+
+### Validation (`scripts/opponent_smoke.py 60`)
+```
+1. CLASSIFY: posterior favours the signature archetype (Fire 0.998), returns priors under no
+            evidence, respects unequal priors
+2. TRACKER : revealed() is a sub-multiset of the known opponent decklist + monotonic (60 games)
+3. ZONE    : template−visible pool invariant n == opp_deck+hand+prize+facedown held at all
+            1869 stable (MAIN) decisions (2695 total)
+sample: revealed 6 (5 distinct) | deck39 hand9 prize6 | P(opp holds Maximum Belt in hand)=0.167
+```
+
+### Two bugs found & fixed (both in reasoning, not just code)
+- **Log `playerIndex` is the actor, not the owner.** Harvesting opponent identity from logs
+  mis-attributed *our* cards when the opponent's action targeted them (revealed > decklist).
+  Fixed by trusting only visible-zone location for ownership. (Rare reveal-then-rehide cards
+  are then missed — an acceptable correctness/completeness trade.)
+- **Self-play flips perspective.** `yourIndex` alternates each turn, so one tracker in a
+  self-play harness conflates both players. A real agent has a fixed viewpoint; the test now
+  keeps one tracker per side, each fed only its own turns.
+
+### Next
+- Threat model on top of the zone model: P(our active KO'd next turn), P(gust/switch in their
+  hand), expected incoming damage — needs attack/effect reads from the card DB.
+- Real archetype templates + meta-share priors from the replay-mining pipeline (§5), then
+  measure classifier accuracy vs replay ground truth (§7.3 originality play).
