@@ -147,3 +147,51 @@ Budget translation: ~4k transitions per 0.5 s, ~8k per 1 s, ~24k per 3 s (single
 - Random rollouts under-sample expensive lines (few big attacks in a random mirror); real
   search will weight toward combat, so expect the effective mean above 124 us. Direction and
   magnitude hold: depth is not step-speed-limited.
+
+---
+
+## #4 — Belief Engine Layer 2a: own-deck hidden-zone tracker + hypergeometric draw model
+
+**Date:** 2026-07-06
+**Code:** `src/ptcg/belief.py`, `scripts/belief_smoke.py`
+
+### Goal
+The exact, priors-free slice of Belief (§3 Layer 2; §4 deck-thinning): track our own hidden
+cards and answer draw questions ("P(draw a Basic / energy / supporter in next k)",
+"E[energy in next k]"). Feeds the deck-quality metric, out-counting, deck-out risk, and the
+determinization sampler that experiment #3 showed is cheap to run.
+
+### Key idea (why it's exact, no learning)
+We know our 60-card decklist, and the engine shows every one of our cards except those in
+deck and (face-down) prizes. So `pool = decklist − everything-of-ours-we-can-see`, with
+`n = |pool| = deck_count + unknown_prizes`. The deck/prize split is a uniform random
+partition, so by **exchangeability the next k draws are a uniform k-subset of the pool** →
+"P(next k draws contain a target)" is a plain hypergeometric over the pool (prizes counted
+in n, never drawn; effective draws capped at deck_count).
+
+### Validation (`scripts/belief_smoke.py 60`)
+```
+1. MATH   : prob_at_least matches brute-force enumeration on 8 cases (max err 0)
+2. MODEL  : P(>=1 of 6/40, k=5) analytic 0.5771 vs Monte-Carlo 0.5816 (err 0.0045)
+3. TRACKER: exact pool invariant held at all 1903 stable (MAIN) decisions;
+            no negative pool counts across 2784 total decisions over 60 games
+sample: 50 hidden (44 deck+6 prize) | P(Basic,1)=0.08 | P(energy,2)=0.845 |
+        P(supporter,3)=0.414 | E[energy in 3]=1.80
+```
+
+### Two edge cases found & handled
+- **Simultaneous setup:** our own active is placed face-down (hidden even to us) → a third
+  unseen zone. Tracked as `facedown_in_play`; invariant becomes `n = deck + unknown_prize +
+  facedown`. Post-setup it's 0.
+- **Mid-effect resolution:** while a multi-step effect resolves (e.g. "look at top N"), the
+  played card is in flight (out of hand, not yet discarded) and momentarily in no zone. So
+  the pool is exact only at **stable points** (MAIN menu / turn boundaries) — exactly where
+  draw math is used. The smoke test asserts the exact invariant only at MAIN decisions and
+  checks no-negative-counts everywhere.
+
+### Next (Belief Layer 2b)
+- Opponent model: Bayesian archetype prior → decklist template → subtract seen cards →
+  hypergeometric over their hidden zones (§4 "opponent prediction → distribution"). This is
+  the `BeliefState.opponent` placeholder.
+- Deck-quality metric = E[usefulness of next k draws] via this tracker (needs per-card
+  situational usefulness scoring — pairs with the heuristic evaluator).
