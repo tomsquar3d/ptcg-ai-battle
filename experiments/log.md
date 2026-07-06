@@ -56,3 +56,47 @@ OK: all games ended with status DONE for both players.
 - The random mirror ≈50/50 is the control the seven-axis deck experiments measure against.
 - Next: benchmark `search_step` speed (gates lookahead depth), stand up the Belief
   Engine skeleton, and start the heuristic evaluator (`src/`).
+
+---
+
+## #2 — Belief Engine Layer 1: Perception (`src/ptcg/perception.py`)
+
+**Date:** 2026-07-06
+**Code:** `src/ptcg/perception.py`, `scripts/perception_smoke.py`
+
+### Goal
+Build the first Belief Engine layer (§3, Layer 1): a **pure** transformation from a raw
+engine `Observation` to a structured, decision-friendly `GameState`. Foundation for every
+downstream layer.
+
+### Design
+- `build_game_state(observation, card_index) -> GameState`. Resolves card IDs to `CardData`
+  (names/HP/ex-status), splits the board into `me` / `opponent` `PlayerView`s, wraps in-play
+  Pokémon as `PokemonView` (energy count, tools, damage, prize value 1/2/3 for ex/megaEx),
+  and normalizes the current decision as a `DecisionView` (with a human-readable
+  `context_name`). Exposes `prize_race` and `is_terminal`.
+- **No native/ctypes import** — reads plain attributes off the observation, so it is unit-
+  testable on fixtures and can never be the layer that fails to import inside the agent.
+- **Graceful degradation** — unknown card IDs (→ `#<id>`), empty/face-down boards, and
+  enum values added mid-competition (→ `CONTEXT_<n>`) never raise. This is where the
+  "crash = loss" guarantee starts.
+
+### Result (`scripts/perception_smoke.py 60`)
+Drives random self-play and builds a `GameState` at *every* in-game decision:
+```
+games run            : 60  (finished cleanly: 60)
+GameStates built     : 3298  (0 exceptions)
+distinct contexts hit: 11   (MAIN, TO_HAND, DISCARD_ENERGY, SETUP_ACTIVE/BENCH_POKEMON,
+                              ATTACH_TO/FROM, TO_ACTIVE, IS_FIRST, SWITCH, DRAW_COUNT)
+sample: turn=3 MAIN(1-1 of 9)  me active='Snover' bench=0 hand=7 deck=45 prizes=6 ...
+```
+- **0 exceptions over 3298 decisions** — perception is robust across every context random
+  play reached; card-ID → name resolution and prize/board summaries verified by eye.
+
+### Caveats / next
+- Only 11 of 49 `SelectContext`s are reached by a random mirror of the sample deck (no
+  evolutions, attacks-with-effects, damage-counter placement, special conditions). Widen
+  coverage later with scripted lines or richer decks; add a fixture-based unit test for the
+  rarer contexts so they're not only exercised by chance.
+- Next Belief work: hidden-zone tracker + hypergeometric draw model; and the week-1
+  `search_step` speed benchmark (still outstanding — gates lookahead depth).
