@@ -180,14 +180,21 @@ sample: 50 hidden (44 deck+6 prize) | P(Basic,1)=0.08 | P(energy,2)=0.845 |
 ```
 
 ### Two edge cases found & handled
-- **Simultaneous setup:** our own active is placed face-down (hidden even to us) → a third
-  unseen zone. Tracked as `facedown_in_play`; invariant becomes `n = deck + unknown_prize +
-  facedown`. Post-setup it's 0.
+- **Simultaneous setup:** our own active is placed face-down (`None`) in the state snapshot.
+  BUT — like real TCG — the engine still tells *us* which card it is: our own placement is a
+  `MOVE_CARD` (type 6) log **with** the cardId, while the opponent's is `MOVE_CARD_REVERSE`
+  (type 7, no id). The identifying log only lives in the window since our last selection, so
+  it scrolls off ~16% of face-down snapshots (130/154 recoverable from the current obs alone).
+  Fixed with `OwnZoneTracker` (§2 Zone Tracker): a stateful replay of the log stream that
+  accumulates our own face-down in-play cards (keyed by serial, cleared on reveal / leaving
+  play). Feeding it every observation, `build_belief(..., own_facedown_ids=...)` makes the
+  pool **exact through setup** — validated: tracker identified 67/67 face-down cards, pool
+  exact at all 247 turn-0 decisions. Without a tracker, `facedown_in_play` carries the count.
 - **Mid-effect resolution:** while a multi-step effect resolves (e.g. "look at top N"), the
   played card is in flight (out of hand, not yet discarded) and momentarily in no zone. So
   the pool is exact only at **stable points** (MAIN menu / turn boundaries) — exactly where
-  draw math is used. The smoke test asserts the exact invariant only at MAIN decisions and
-  checks no-negative-counts everywhere.
+  draw math is used. The smoke test asserts the exact invariant at MAIN decisions (and, with
+  the tracker, at setup) and checks no-negative-counts everywhere.
 
 ### Next (Belief Layer 2b)
 - Opponent model: Bayesian archetype prior → decklist template → subtract seen cards →

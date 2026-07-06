@@ -33,6 +33,59 @@ from typing import Any, Callable, Iterable, Mapping, Optional, Union
 
 Targets = Union[int, Iterable[int], Callable[[int], bool]]
 
+# AreaType values (mirrors cg.api.AreaType) used when reading the log stream.
+_AREA_ACTIVE = 4
+_AREA_BENCH = 5
+_LOG_MOVE_CARD = 6  # LogType.MOVE_CARD — our own move, carries cardId (opponent's is 7/REVERSE)
+
+
+class OwnZoneTracker:
+    """Stateful tracker of our own cards that are in play but shown face-down.
+
+    During simultaneous setup the engine renders our own active/bench Pokémon as face-down
+    (`None`) in the state snapshot — but, exactly like real TCG, it still tells *us* which
+    card it is: our own placement is logged as a MOVE_CARD (type 6) with the cardId, whereas
+    the opponent's is a MOVE_CARD_REVERSE (type 7, no id). The log only appears in the window
+    since our previous selection, so it can scroll out of a later snapshot — hence this
+    accumulates it. Feed **every** observation we receive, in order, via `observe()`.
+
+    `facedown_ids()` then returns the card ids of our currently face-down in-play cards, which
+    `build_belief(..., own_facedown_ids=...)` uses to make the hidden pool exact through setup.
+    """
+
+    def __init__(self) -> None:
+        self._facedown: dict[int, int] = {}  # serial -> cardId (ours, in play, not yet seen face-up)
+
+    def observe(self, observation: Any) -> "OwnZoneTracker":
+        state = getattr(observation, "current", None)
+        if state is None:
+            return self
+        me = getattr(state, "yourIndex", 0) or 0
+
+        for lg in getattr(observation, "logs", None) or []:
+            if getattr(lg, "playerIndex", None) != me or getattr(lg, "type", None) != _LOG_MOVE_CARD:
+                continue
+            serial = getattr(lg, "serial", None)
+            if serial is None:
+                continue
+            to_area, from_area = getattr(lg, "toArea", None), getattr(lg, "fromArea", None)
+            cid = getattr(lg, "cardId", None)
+            if to_area in (_AREA_ACTIVE, _AREA_BENCH) and cid is not None:
+                self._facedown[serial] = cid           # we placed one of our cards into play
+            elif from_area in (_AREA_ACTIVE, _AREA_BENCH):
+                self._facedown.pop(serial, None)         # it left play
+
+        # Anything now visible on our board (serial known) is no longer face-down.
+        players = getattr(state, "players", None) or []
+        if me < len(players):
+            for pk in list(getattr(players[me], "active", None) or []) + list(getattr(players[me], "bench", None) or []):
+                if pk is not None:
+                    self._facedown.pop(getattr(pk, "serial", None), None)
+        return self
+
+    def facedown_ids(self) -> Counter:
+        return Counter(self._facedown.values())
+
 
 def _matches(target: Targets, card_index: Optional[Mapping[int, Any]]) -> Callable[[int], bool]:
     """Normalize a target spec (id / ids / predicate) into a card_id -> bool test."""
@@ -153,7 +206,12 @@ class BeliefState:
         return self.opp_prizes_left - self.my_prizes_left
 
 
-def _own_hidden_pool(state: Any, my_index: int, own_decklist: Iterable[int]) -> tuple[Counter, int, int, int]:
+def _own_hidden_pool(
+    state: Any,
+    my_index: int,
+    own_decklist: Iterable[int],
+    known_facedown_ids: Optional[Iterable[int]] = None,
+) -> tuple[Counter, int, int, int]:
     """Return (pool, deck_count, known_prize_count, facedown_in_play) for our side.
 
     pool = decklist − (every card of ours currently visible/known), where 'known' covers
@@ -208,6 +266,17 @@ def _own_hidden_pool(state: Any, my_index: int, own_decklist: Iterable[int]) -> 
         facedown = sum(1 for p in list(getattr(mep, "active", None) or [])
                        + list(getattr(mep, "bench", None) or []) if p is None)
 
+    # Face-down own cards we've identified from the log stream (via OwnZoneTracker): they are
+    # in play, not draw/prize, so subtract their ids and drop them from the unknown count.
+    if known_facedown_ids is not None:
+        resolved = 0
+        for cid in known_facedown_ids:
+            if resolved >= facedown:
+                break
+            pool[cid] -= 1
+            resolved += 1
+        facedown -= resolved
+
     deck_count = getattr(players[my_index], "deckCount", 0) if my_index < len(players) else 0
     return pool, deck_count, known_prize, facedown
 
@@ -216,14 +285,19 @@ def build_belief(
     observation: Any,
     own_decklist: Iterable[int],
     card_index: Optional[Mapping[int, Any]] = None,
+    own_facedown_ids: Optional[Iterable[int]] = None,
 ) -> BeliefState:
     """Build a BeliefState from an in-game Observation and our known 60-card decklist.
 
-    The hidden-pool reconstruction is exact at stable decision points — the MAIN action
-    menu and turn boundaries, which is when draw math is actually used. During multi-step
-    effect resolution (e.g. while a "look at the top N" is resolving) a card can be in
-    flight (out of hand, not yet in discard), so the pool may transiently include it; treat
-    draw probabilities as exact only at MAIN decisions.
+    Pass `own_facedown_ids` (from a persistent `OwnZoneTracker.facedown_ids()`) to make the
+    pool exact through simultaneous setup, when our own active/bench are shown face-down but
+    are actually known to us from the log stream. Without it, those cards stay in the pool as
+    `facedown_in_play` unknowns.
+
+    Even so, the pool is exact only at stable decision points — the MAIN action menu and turn
+    boundaries. During multi-step effect resolution (e.g. while a "look at top N" resolves) a
+    played card is in flight (out of hand, not yet in discard), so treat draw probabilities as
+    exact at MAIN decisions.
 
     Raises ValueError on the initial deck-selection observation (no `current` state).
     """
@@ -235,7 +309,8 @@ def build_belief(
     opp_index = 1 - my_index
     players = getattr(state, "players", None) or []
 
-    pool, deck_count, known_prize, facedown = _own_hidden_pool(state, my_index, own_decklist)
+    pool, deck_count, known_prize, facedown = _own_hidden_pool(
+        state, my_index, own_decklist, known_facedown_ids=own_facedown_ids)
     draw = DrawModel(pool=pool, deck_count=deck_count, card_index=card_index)
 
     def prize_left(idx: int) -> int:

@@ -31,7 +31,7 @@ from collections import Counter                                    # noqa: E402
 from cg.api import to_observation_class, all_card_data             # noqa: E402
 from cg.game import battle_start, battle_select, battle_finish     # noqa: E402
 from main import read_deck_csv                                     # noqa: E402
-from ptcg.belief import DrawModel, build_belief                    # noqa: E402
+from ptcg.belief import DrawModel, build_belief, OwnZoneTracker    # noqa: E402
 
 
 def random_select(select):
@@ -138,12 +138,54 @@ def _energy_pred(card_index):
     return lambda cid: getattr(card_index.get(cid), "cardType", None) in (5, 6)
 
 
+# ---- check 4: OwnZoneTracker makes the pool exact through setup -----------------------
+def check_setup_tracker(num_games):
+    deck = read_deck_csv()
+    facedown_seen = 0          # face-down own slots encountered (would be unknown w/o tracker)
+    facedown_resolved = 0      # of those, identified by the tracker
+    setup_decisions = 0        # turn-0 decisions checked exact
+    for _g in range(num_games):
+        tracker = OwnZoneTracker()
+        obs_dict, _ = battle_start(deck, list(deck))
+        try:
+            for _ in range(2000):
+                obs = to_observation_class(obs_dict)
+                if _terminal(obs):
+                    break
+                tracker.observe(obs)  # feed EVERY observation in order (accumulates log stream)
+                b = build_belief(obs, deck, own_facedown_ids=tracker.facedown_ids().elements())
+
+                st = obs.current
+                mep = st.players[st.yourIndex]
+                raw_facedown = sum(1 for p in list(mep.active or []) + list(mep.bench or []) if p is None)
+                facedown_seen += raw_facedown
+                facedown_resolved += (raw_facedown - b.facedown_in_play)
+
+                unknown_prizes = b.my_prizes_left - b.known_prize_count
+                assert all(v >= 0 for v in b.draw.pool.values()), "negative pool count"
+                # With the tracker, setup (turn 0) decisions are now exact: no unknown face-down.
+                if st.turn == 0:
+                    setup_decisions += 1
+                    assert b.facedown_in_play == 0, (
+                        f"tracker left {b.facedown_in_play} unknown face-down at setup")
+                    assert b.draw.n == b.my_deck_count + unknown_prizes, (
+                        f"setup pool {b.draw.n} != deck {b.my_deck_count} + unk_prize {unknown_prizes}")
+                obs_dict = battle_select(random_select(obs.select))
+        finally:
+            battle_finish()
+
+    print(f"4. SETUP  : OwnZoneTracker identified {facedown_resolved}/{facedown_seen} face-down "
+          f"own cards; pool exact at all {setup_decisions} setup (turn-0) decisions  OK")
+    assert facedown_resolved == facedown_seen, "tracker missed some face-down cards"
+
+
 def main(num_games):
     print("=== belief layer test ===")
     check_math()
     check_model()
     check_tracker(num_games)
-    print("\nOK: belief math, draw model, and hidden-zone tracker all validated.")
+    check_setup_tracker(num_games)
+    print("\nOK: belief math, draw model, hidden-zone tracker, and setup tracker all validated.")
     return 0
 
 
