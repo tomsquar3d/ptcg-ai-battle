@@ -797,6 +797,44 @@ The 200-game validation vs heuristic + vs v1 (per-matchup win rates) + the evolu
 to confirm the multi-turn planning gap (#15/#17) actually improves under MCTS. This is the decisive
 experiment; it is compute-heavy (MCTS games are slow) and was intentionally deferred.
 
+## #21 — v4 (MCTS-H) validation: MCTS is the strongest pilot yet (`experiments/validation_v4.*`)
+
+**Date:** 2026-07-07
+**Code:** `scripts/validate_v4.py` (parallel per-matchup A/B); fixed v4's per-game OpponentTracker reset
+
+### Setup
+v4 (MCTS-H, 5 s/K=8 critical budgets) vs the heuristic pilots v3 (beam) and v1 (turn-aware), both
+sides piloting the SAME deck, seats alternated, N=40/matchup, on an evolution-line deck
+(dragapult-ex — where the #15/#17 planning gap lives) and the simple sample deck. Parallel across
+9 workers (~4 min CPU per evolution game — the slow part). N=200 was ~3 h, so N=40 for the signal.
+
+### Result — POSITIVE (the first winning "smarter pilot" of the arc)
+```
+v4 vs v3, evolution : 62% (25/15)   ~1.6σ
+v4 vs v3, sample    : 60% (24/16)   ~1.3σ   ← beats beam even on the simple deck
+v4 vs v1, evolution : 78% (31/9)    ~3.5σ   ← decisive, exactly where planning matters
+v4 vs v1, sample    : 52% (21/19)   ~even  (simple deck needs no deep search)
+```
+
+### Read
+- **v4 is the best pilot**: dominates v1 on evolution (78%, rock-solid) and beats v3 on BOTH decks
+  (60-62%). Each v4-vs-v3 result is only borderline at N=40, but the *consistency* across two
+  independent matchups in the same direction is the real signal — MCTS's multi-turn search is a
+  general improvement, largest where sequencing matters.
+- Contrast with #10/#16/#17/#18: enriching the *evaluation* (reply term, prize-race leaf) was
+  neutral; enriching the *search* (beam #16, now full MCTS) is what pays. Depth > leaf tweaks here.
+
+### Caveats / what this does NOT show
+- N=40 → the v4-vs-v3 edges want a higher-N confirmation; v4-vs-v1-evolution (78%) already is solid.
+- This tests PILOT strength, not deck strength. Whether meta decks now beat `sample` under the v4
+  pilot (the #17 question) is a separate, expensive v4-pilot round-robin — not run here.
+- Ladder: we ship the simple sample deck where v4 ≈ v1 (52%), so v4 alone is only a marginal ladder
+  gain; its value is unlocking complex decks a good pilot can actually play.
+
+### Next
+- (confirm) extend v4 vs v3 to higher N; (unlock) v4-pilot deck round-robin (do meta decks beat
+  sample now?); (train) v4 is now a validated strong teacher → self-play RL is de-risked (§3 roadmap).
+
 ## #17 — v3-pilot round-robin: the #15 pilot-confound was WRONG (`candidate_round_robin_v3.*`)
 
 **Date:** 2026-07-07

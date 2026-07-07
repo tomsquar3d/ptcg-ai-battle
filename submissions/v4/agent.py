@@ -38,17 +38,21 @@ def _lazy_init():
     if _CI is None:
         _CI = {c.cardId: c for c in all_card_data()}
         _AI = {a.attackId: a for a in all_attack()}
-        _TRACKER = OpponentTracker()
         try:
             from ptcg.archetypes import default_archetypes
             _ARCHS = default_archetypes()
         except Exception:
             _ARCHS = None
+    if _TRACKER is None:
+        _TRACKER = OpponentTracker()
 
 
 def set_deck(deck):
-    global _DECK
+    """Called once per game at deck selection — also resets the per-game opponent tracker so its
+    seen-card evidence never leaks across games (e.g. in a multi-game validation harness)."""
+    global _DECK, _TRACKER
     _DECK = list(deck)
+    _TRACKER = OpponentTracker()
 
 
 def _legal_random(sel):

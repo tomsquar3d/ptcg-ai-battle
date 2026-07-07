@@ -1,0 +1,22 @@
+{
+  "v4_vs_v3|dragapult(evo)": {
+    "win_rate": 0.625,
+    "v4": 25,
+    "opp": 15
+  },
+  "v4_vs_v3|sample": {
+    "win_rate": 0.6,
+    "opp": 16,
+    "v4": 24
+  },
+  "v4_vs_v1|dragapult(evo)": {
+    "win_rate": 0.775,
+    "v4": 31,
+    "opp": 9
+  },
+  "v4_vs_v1|sample": {
+    "win_rate": 0.525,
+    "opp": 19,
+    "v4": 21
+  }
+}
