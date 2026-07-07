@@ -693,3 +693,41 @@ v3 vs v1, DRAGAPULT-EX (complex): 28/12 -> 70% (N=40, ~2.5σ); move mean 72 ms, 
   the meta decks are piloted competently? If a v3-piloted meta deck beats the field → ship v3 + it.
 - Then re-test opponent-response (#10) on top of the stronger search (its premise was "fix search
   first").
+
+## #17 — v3-pilot round-robin: the #15 pilot-confound was WRONG (`candidate_round_robin_v3.*`)
+
+**Date:** 2026-07-07
+**Code:** `round_robin.py` (PILOT_DIR env), `candidate_round_robin.py` (pilot-suffixed outputs)
+
+### Test
+#15 diagnosed the sample deck's 80% dominance as a pilot confound (heuristic pilot can't play the
+complex meta decks). #16 built v3 (beam search) and proved it pilots complex decks 70% better than
+v1. So: re-run the 9-deck round-robin (N=30) with **v3 as the pilot on both sides** — if the
+confound was real, the meta decks should close the gap on sample.
+
+### Result — they did NOT close the gap
+```
+sample raw win rate     : 80.0% (v1 pilot) -> 81.2% (v3 pilot)   UNCHANGED
+sample avg vs the field : 0.20  (v1 pilot) -> 0.19  (v3 pilot)   UNCHANGED
+(per-deck vs-sample deltas are N=30 noise: dusknoir 0.17->0.27, alakazam 0.28->0.10, etc.)
+v3-pilot ranking still: 1. sample 81% ... every meta candidate 32-59%.
+```
+
+### Conclusion — self-correction
+- **The #15 pilot-confound diagnosis was wrong (or at most minor).** Fixing the pilot's *within-turn*
+  search — a real, validated improvement (#16) — did not lift the meta decks against sample. So the
+  gap is NOT primarily about within-turn piloting.
+- The auto-generated meta decks are **genuinely weaker** than the sample deck in the SDK. Two live
+  causes I can't yet separate: (a) **crude auto-builds** (round(expected)+energy padding, out-of-pool
+  gaps, no ratio/tech tuning), and/or (b) the decks' power needs **multi-turn strategic planning**
+  (evolve over 2-3 turns → payoff) that v3 lacks — v3 optimizes single turns, not sequences of turns.
+- **v3 is still a strict pilot upgrade** (#16), just not the deck-unlocker I hoped. On the *simple*
+  sample deck v3 ≈ v1, so **v3+sample ≈ v1+sample on the ladder — no submission gain from v3 alone.**
+
+### Strategic takeaways
+- **Ship a simple, consistent deck** (sample-like): confirmed competitive twice, and the pilot maxes
+  it. Deck construction is **not a quick win** — auto-decks are genuinely worse.
+- The real ladder levers are elsewhere: a better *simple* deck (hand-tuned aggro), **multi-turn**
+  planning in the pilot, evaluator quality, and diagnosing why v1 sits below μ₀=600.
+- To separate cause (a) vs (b): pit a **hand-tuned real Limitless list** (pool-filtered) vs sample
+  under v3 — if it beats sample, my builds were the problem; if not, it's multi-turn planning / meta.

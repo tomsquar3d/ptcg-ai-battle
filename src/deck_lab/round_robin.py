@@ -26,7 +26,9 @@ from itertools import combinations
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-AGENT_DIR = os.path.join(REPO, "submissions", "v1")  # the piloting brain (current best agent)
+# The piloting brain. Defaults to v1; set PILOT_DIR=v3 (etc.) to compare pilots on the same decks.
+PILOT = os.environ.get("PILOT_DIR", "v1")
+AGENT_DIR = os.path.join(REPO, "submissions", PILOT)
 sys.path.insert(0, AGENT_DIR)
 
 from cg.api import to_observation_class                       # noqa: E402

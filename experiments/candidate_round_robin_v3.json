@@ -1,0 +1,178 @@
+{
+  "games_per_pairing": 30,
+  "matrix": {
+    "alakazam-dudunsparce": {
+      "dragapult-blaziken": 0.433,
+      "dragapult-dusknoir": 0.3,
+      "dragapult-ex": 0.433,
+      "mega-greninja-ex": 0.633,
+      "n-zoroark": 0.333,
+      "rockets-honchkrow": 0.267,
+      "slowking-scr": 0.467,
+      "sample": 0.1
+    },
+    "dragapult-blaziken": {
+      "alakazam-dudunsparce": 0.567,
+      "dragapult-dusknoir": 0.5,
+      "dragapult-ex": 0.533,
+      "mega-greninja-ex": 0.733,
+      "n-zoroark": 0.833,
+      "rockets-honchkrow": 0.567,
+      "slowking-scr": 0.733,
+      "sample": 0.167
+    },
+    "dragapult-dusknoir": {
+      "alakazam-dudunsparce": 0.7,
+      "dragapult-blaziken": 0.5,
+      "dragapult-ex": 0.533,
+      "mega-greninja-ex": 0.833,
+      "n-zoroark": 0.633,
+      "rockets-honchkrow": 0.433,
+      "slowking-scr": 0.833,
+      "sample": 0.267
+    },
+    "dragapult-ex": {
+      "alakazam-dudunsparce": 0.567,
+      "dragapult-blaziken": 0.467,
+      "dragapult-dusknoir": 0.467,
+      "mega-greninja-ex": 0.667,
+      "n-zoroark": 0.667,
+      "rockets-honchkrow": 0.633,
+      "slowking-scr": 0.533,
+      "sample": 0.233
+    },
+    "mega-greninja-ex": {
+      "alakazam-dudunsparce": 0.367,
+      "dragapult-blaziken": 0.267,
+      "dragapult-dusknoir": 0.167,
+      "dragapult-ex": 0.333,
+      "n-zoroark": 0.333,
+      "rockets-honchkrow": 0.5,
+      "slowking-scr": 0.7,
+      "sample": 0.133
+    },
+    "n-zoroark": {
+      "alakazam-dudunsparce": 0.667,
+      "dragapult-blaziken": 0.167,
+      "dragapult-dusknoir": 0.367,
+      "dragapult-ex": 0.333,
+      "mega-greninja-ex": 0.667,
+      "rockets-honchkrow": 0.4,
+      "slowking-scr": 0.567,
+      "sample": 0.2
+    },
+    "rockets-honchkrow": {
+      "alakazam-dudunsparce": 0.733,
+      "dragapult-blaziken": 0.433,
+      "dragapult-dusknoir": 0.567,
+      "dragapult-ex": 0.367,
+      "mega-greninja-ex": 0.5,
+      "n-zoroark": 0.6,
+      "slowking-scr": 0.767,
+      "sample": 0.267
+    },
+    "slowking-scr": {
+      "alakazam-dudunsparce": 0.533,
+      "dragapult-blaziken": 0.267,
+      "dragapult-dusknoir": 0.167,
+      "dragapult-ex": 0.467,
+      "mega-greninja-ex": 0.3,
+      "n-zoroark": 0.433,
+      "rockets-honchkrow": 0.233,
+      "sample": 0.133
+    },
+    "sample": {
+      "alakazam-dudunsparce": 0.9,
+      "dragapult-blaziken": 0.833,
+      "dragapult-dusknoir": 0.733,
+      "dragapult-ex": 0.767,
+      "mega-greninja-ex": 0.867,
+      "n-zoroark": 0.8,
+      "rockets-honchkrow": 0.733,
+      "slowking-scr": 0.867
+    }
+  },
+  "ranking": [
+    {
+      "deck": "sample",
+      "win_rate": 0.812,
+      "wins": 195,
+      "losses": 45,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.809
+    },
+    {
+      "deck": "dragapult-dusknoir",
+      "win_rate": 0.592,
+      "wins": 142,
+      "losses": 98,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.649
+    },
+    {
+      "deck": "dragapult-blaziken",
+      "win_rate": 0.579,
+      "wins": 139,
+      "losses": 101,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.642
+    },
+    {
+      "deck": "dragapult-ex",
+      "win_rate": 0.529,
+      "wins": 127,
+      "losses": 113,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.572
+    },
+    {
+      "deck": "rockets-honchkrow",
+      "win_rate": 0.529,
+      "wins": 127,
+      "losses": 113,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.569
+    },
+    {
+      "deck": "n-zoroark",
+      "win_rate": 0.421,
+      "wins": 101,
+      "losses": 139,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.456
+    },
+    {
+      "deck": "alakazam-dudunsparce",
+      "win_rate": 0.371,
+      "wins": 89,
+      "losses": 151,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.405
+    },
+    {
+      "deck": "mega-greninja-ex",
+      "win_rate": 0.35,
+      "wins": 84,
+      "losses": 156,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.374
+    },
+    {
+      "deck": "slowking-scr",
+      "win_rate": 0.317,
+      "wins": 76,
+      "losses": 164,
+      "draws": 0,
+      "games": 240,
+      "meta_weighted_win_rate": 0.355
+    }
+  ]
+}

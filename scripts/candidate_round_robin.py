@@ -18,10 +18,12 @@ sys.path.insert(0, os.path.join(REPO, "submissions", "v1"))
 
 from deck_lab.round_robin import round_robin, read_deck  # noqa: E402
 
+PILOT = os.environ.get("PILOT_DIR", "v1")
 CAND_DIR = os.path.join(REPO, "experiments", "candidate_decks")
 PRIORS = os.path.join(REPO, "src", "priors", "archetype_priors.json")
-OUT_JSON = os.path.join(REPO, "experiments", "candidate_round_robin.json")
-OUT_MD = os.path.join(REPO, "experiments", "candidate_round_robin.md")
+_suffix = "" if PILOT == "v1" else f"_{PILOT}"  # keep the v1 (#15) record at the bare name
+OUT_JSON = os.path.join(REPO, "experiments", f"candidate_round_robin{_suffix}.json")
+OUT_MD = os.path.join(REPO, "experiments", f"candidate_round_robin{_suffix}.md")
 
 
 def main() -> int:
@@ -31,7 +33,7 @@ def main() -> int:
     decks["sample"] = read_deck(os.path.join(REPO, "submissions", "v1", "deck.csv"))
 
     workers = max(1, (os.cpu_count() or 2) - 1)
-    print(f"round-robin: {len(decks)} decks, N={n}/pairing, {workers} workers", flush=True)
+    print(f"round-robin: {len(decks)} decks, N={n}/pairing, {workers} workers, pilot={PILOT}", flush=True)
     res = round_robin(decks, games_per_pairing=n, workers=workers, progress_every=50)
 
     meta = {a: e["meta_share"] for a, e in json.load(open(PRIORS))["archetypes"].items()}
@@ -49,9 +51,9 @@ def main() -> int:
         json.dump(res, f, indent=2)
 
     names = [r["deck"] for r in res["ranking"]]
-    lines = [f"# Candidate Round-Robin ({n} games/pairing)", "",
+    lines = [f"# Candidate Round-Robin ({n} games/pairing, pilot={PILOT})", "",
              "Decks: 8 archetype candidates (`experiments/candidate_decks/`) + the SDK `sample` "
-             "deck, all piloted by the v1 brain. Draws count as half.", "",
+             f"deck, all piloted by the `{PILOT}` brain. Draws count as half.", "",
              "## Ranking", "",
              "| rank | deck | raw win rate | meta-weighted | W/L/D |", "|--:|---|--:|--:|--:|"]
     for i, r in enumerate(res["ranking"], 1):
