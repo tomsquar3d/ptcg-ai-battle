@@ -55,6 +55,9 @@ def _value(state: Any, root_player: int, ci: Mapping, ai: Mapping) -> float:
     return math.tanh(s / VALUE_SCALE)
 
 
+leaf_value = _value  # public alias: root-perspective leaf value in (-1, 1), for heuristic picks
+
+
 def _heuristic_pick(state: Any, ci: Mapping, ai: Mapping) -> list[int]:
     """A legal pick for a forced / multi-select decision. Single forced → [0]; multi-select →
     greedy top-maxCount by the acting player's resulting-state score (their choice benefits them)."""

@@ -21,11 +21,14 @@ def build(version: str) -> None:
     if not os.path.isdir(target):
         raise SystemExit(f"no such submission dir: {target}")
 
-    # 1) sync shared code
-    src_ptcg = os.path.join(REPO, "src", "ptcg")
-    dst_ptcg = os.path.join(target, "ptcg")
-    shutil.rmtree(dst_ptcg, ignore_errors=True)
-    shutil.copytree(src_ptcg, dst_ptcg, ignore=shutil.ignore_patterns("__pycache__"))
+    # 1) sync shared code (src/ptcg + src/search — the belief engine and the search layer)
+    for pkg in ("ptcg", "search"):
+        src_pkg = os.path.join(REPO, "src", pkg)
+        if not os.path.isdir(src_pkg):
+            continue
+        dst_pkg = os.path.join(target, pkg)
+        shutil.rmtree(dst_pkg, ignore_errors=True)
+        shutil.copytree(src_pkg, dst_pkg, ignore=shutil.ignore_patterns("__pycache__"))
 
     # 2) ensure the SDK (with native libs) is present — copy from v0 if missing
     dst_cg = os.path.join(target, "cg")

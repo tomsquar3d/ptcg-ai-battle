@@ -769,6 +769,34 @@ K(4-8)/sims to the ~5 s budget, wrap as a submission (next free slot — v2 is t
 then validate 200 games vs heuristic + vs v1 with per-matchup win rates, incl. an evolution-line
 deck to confirm the multi-turn planning failure (#15/#17) improves.
 
+## #20 — MCTS-H governor + v4 wrap; correctness-validated, big validation HELD (`submissions/v4/`)
+
+**Date:** 2026-07-07
+**Code:** `src/search/governor.py`, `submissions/v4/` (agent+main+deck+vendored search), `build_submission.py`
+
+### Built
+- `governor.py`: per-move budget from the clock + prize-path critical triggers (KO available, our
+  active under KO = race swing, or endgame prizes ≤2) → deep MCTS (5 s, K=8) on critical turns,
+  shallow (0.4 s, K=1) routine, instant legal move under 20 s clock. Hard deadline passed to MCTS
+  (checked per sim → overshoot bounded to one sim). Fixed a bug: `prize_count==0` at *setup* falsely
+  read as endgame-critical → guarded `0 < pc ≤ 2`.
+- `submissions/v4/agent.py`: perception → governor → determinize K worlds → PUCT MCTS → most-visited
+  root action; multi-select root via one-step heuristic; defensive wall unchanged (main.py watchdog).
+- `build_submission.py` now vendors `src/search` alongside `src/ptcg` so v4 ships self-contained.
+
+### Correctness smoke (validation deliberately held per plan)
+```
+raw SDK, 4 games vs random (fast budgets): 4/4 completed, 0 exceptions, v4 3/4 wins
+  move time mean 320 ms, p95 1039 ms, max 1063 ms (=1 s budget + 1-sim overshoot → watchdog holds)
+cabt env, 2 games (real bundle, main.py): both DONE/DONE
+```
+v4 ships with real budgets (CRITICAL_S=5.0, ROUTINE_S=0.4, K=8).
+
+### HELD (awaiting go-ahead)
+The 200-game validation vs heuristic + vs v1 (per-matchup win rates) + the evolution-line deck test
+to confirm the multi-turn planning gap (#15/#17) actually improves under MCTS. This is the decisive
+experiment; it is compute-heavy (MCTS games are slow) and was intentionally deferred.
+
 ## #17 — v3-pilot round-robin: the #15 pilot-confound was WRONG (`candidate_round_robin_v3.*`)
 
 **Date:** 2026-07-07
