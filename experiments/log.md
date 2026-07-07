@@ -737,6 +737,38 @@ captures a lot; enrichments rarely help unless they add genuinely new predictive
 Iterate the model against the Pearson test: per-target `attack_potential` (real weakness/HP), a
 first-mover/tempo term, and only trust turns-to-6 once an attacker is online. Cheap to iterate now.
 
+## #19 — MCTS-H foundation + benchmark gate (`src/search/`)
+
+**Date:** 2026-07-07
+**Code:** `src/search/{determinizer,mcts}.py`, `scripts/mcts_benchmark.py`
+
+### Built (parts 1,2,4 of the MCTS-H task; governor + validation deferred to the gate)
+- `determinizer.py`: samples K worlds (our exact hidden pool via `belief`; opponent zone from
+  archetype templates, reconciled to exact zone counts + guaranteed Basic). Discard handled by the
+  belief layer (subtracts all visible incl. both discards); retrieval-from-discard is resolved by
+  the engine during `search_step`, not the determinizer.
+- `mcts.py`: determinized PUCT over the native Search API — perspective-aware (our-turn maximise,
+  opp-turn minimise), evaluator leaf **squashed via tanh/3000** so Q and the exploration term share
+  a scale, forced/multi-select auto-collapsed to the next real branch, injectable priors (uniform
+  now), stats aggregated across K worlds. (Chained multi-select + chance resampling = refinements.)
+
+### Benchmark gate (turn-2 dragapult decision, K=1)
+```
+determinizer valid: search_begin ACCEPTS its output (counts + discard subtraction correct)
+determinize        : 4.4 ms / world
+search_step        : ~7,000 steps/sec (143 µs/step)   [matches #3]
+MCTS sims/sec K=1  : ~3,900/sec ;  K=8 ~4,300/sec (world round-robin ≈ free)
+```
+Sizing: ~4k sims/sec ⇒ a 5 s critical-turn budget ≈ **~20k sims** → K=8 gives ~2.5k sims/world,
+ample for useful PUCT. Caveat: measured early-game (short turns, small eval states); mid/late-game
+will be slower per sim — treat 4k/sec as an upper bound.
+
+### Next (post-gate)
+Governor (per-move budget from clock + prize-path critical-turn triggers + hard watchdog), tune
+K(4-8)/sims to the ~5 s budget, wrap as a submission (next free slot — v2 is taken by #10; use v4),
+then validate 200 games vs heuristic + vs v1 with per-matchup win rates, incl. an evolution-line
+deck to confirm the multi-turn planning failure (#15/#17) improves.
+
 ## #17 — v3-pilot round-robin: the #15 pilot-confound was WRONG (`candidate_round_robin_v3.*`)
 
 **Date:** 2026-07-07
