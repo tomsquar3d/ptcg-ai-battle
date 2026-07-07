@@ -1,0 +1,13 @@
+# Neural-layer / training dependencies (src/nn/, self-play RL) — DEV + TRAINING ONLY.
+# These are NOT shipped in the Kaggle submission: the deployed agent runs the belief engine +
+# MCTS-H in pure Python and (later) the trained net as ONNX-on-CPU. Keep the submission bundle free
+# of torch.
+#
+# Install the CPU torch build for local dev:
+#   .venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+# On a training GPU box, install the matching CUDA build instead.
+
+numpy>=1.24
+torch>=2.0            # CPU build locally; CUDA build on the training GPU
+# onnx>=1.15         # add when wiring ONNX export
+# onnxruntime>=1.17  # CPU inference in the deployed agent

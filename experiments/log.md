@@ -962,3 +962,24 @@ games, 0 errors; max 25 options/decision (0 truncated); option-type one-hots ver
 - Torch encoder + heads (embedding table + per-zone attention pooling → state vector; pointer policy
   head scoring options against it + value head). Needs a **PyTorch install** (training-only; the
   deployed agent uses ONNX-CPU). Then: self-play recorder → AlphaZero train → wire net into MCTS.
+
+## #25 — ML foundations: encoder + policy/value net (`src/nn/encoder.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/nn/encoder.py`, `scripts/encoder_smoke.py`, `requirements-train.txt`; torch 2.12 CPU installed
+
+`PTCGNet` (§3 Layers 3-4): shared card embedding → per-Pokémon tokens (embed⊕scalars) → 1 self-
+attention layer → masked attention-pool = board; hand attention-pool; globals MLP; state MLP over
+[board, hand, stadium, globals] = state vector. Pointer **policy** head scores each option token
+(embed⊕option-scalars) against the state (padding → −inf); **value** head → tanh ∈ (−1,1) (matches
+the MCTS leaf scale). `collate()` stacks featurized (state, action) pairs → batch tensors.
+Validated (`encoder_smoke.py`): forward gives logits [B,64]+value [B] with legal finite / padding
+−inf / normalized policy / value∈(−1,1); loss backprops with finite grads; **496,962 params (~2 MB
+fp32)** → ONNX-CPU-friendly. torch is dev/training-only (`requirements-train.txt`); never shipped.
+
+### Next
+- **Self-play recorder**: run v4 (MCTS-H) games, emit training tuples (state+action features,
+  MCTS root visit distribution = policy target π, game outcome = value target z) into a buffer.
+- **Trainer**: AlphaZero loss (policy CE vs π + value MSE vs z); acceptance-gate new checkpoints via
+  the existing `round_robin` harness. Then wire the net as MCTS `prior_fn` + leaf value (small refactor
+  — leaf value currently hardcoded), and ONNX-export for deploy.
