@@ -655,3 +655,41 @@ every candidate vs sample: 5-33% win rate
   strength (or hand-tuned builds), not more games.
 - Fair-eval ideas: pilot each deck with a deck-aware policy, or measure decks by *consistency*
   proxies (turn-2 attack rate, energy-attach curve) rather than only win rate under one weak brain.
+
+## #16 — v3 beam / best-first turn search: fixes the greedy pilot (`submissions/v3/`)
+
+**Date:** 2026-07-07
+**Agent:** `submissions/v3/agent.py`
+**Deck:** SDK sample (ladder) + candidate decks (test)
+
+### Hypothesis
+The pilot's weakness (#15) is *greedy* within-turn planning: v1/v2 commit to the best immediate
+option each step, so setup→payoff sequences (evolve→attach→attack, discard-to-draw) are never
+found. Within our turn there's no opponent interleave, so it's a single-agent deterministic search
+— replace greedy (beam width 1) with a **beam / best-first search** over turn action-sequences.
+
+### Method
+v3 keeps `BEAM_WIDTH=8` partial lines per ply, each tagged with its first root option; scores
+end-of-turn states for the answer and partial states only to order the frontier; returns the first
+move of the best end-of-turn line. Anytime, `NODE_BUDGET=7000`, `DEPTH_CAP=24`, same watchdog.
+Reply-blind like v1 (opponent-reply was neutral in #10 — re-test on top later).
+
+### Result (`scripts/v3_eval.py` + complex-deck head-to-head)
+```
+vs random (sample deck): 82% W/L/D 33/7/0; move mean 15 ms, max 167 ms; 0 exceptions; cabt all DONE
+v3 vs v1, SAMPLE deck (simple) : 51/49 -> 51%  = TIE (no sequencing depth; greedy already optimal)
+v3 vs v1, DRAGAPULT-EX (complex): 28/12 -> 70% (N=40, ~2.5σ); move mean 72 ms, max 500 ms
+```
+
+### Takeaways
+- **Beam value scales with deck sequencing complexity** — nil on the simple sample deck, decisive
+  (70%) on a complex evolution/combo deck. Directly confirms the #15 pilot-confound diagnosis.
+- v3 is a **strict upgrade** over v1: ≥ on simple, ≫ on complex, still trivially inside the clock.
+- **Nuance for the ladder:** we currently ship the *simple* sample deck, where v3 ≈ v1 — so v3
+  alone won't move the ladder. v3's edge only manifests with a complex deck it can now pilot.
+
+### Next
+- Re-run the candidate round-robin with v3 as pilot: does the #15 sample-deck dominance lift once
+  the meta decks are piloted competently? If a v3-piloted meta deck beats the field → ship v3 + it.
+- Then re-test opponent-response (#10) on top of the stronger search (its premise was "fix search
+  first").
