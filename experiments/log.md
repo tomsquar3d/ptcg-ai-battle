@@ -580,3 +580,36 @@ small N**: §5's ~200 games/pairing is the real target; N is the wall-clock↔co
 - Candidate generation: build legal 60-card decks from the archetype templates (`archetypes.py`)
   — template core + basic-energy/flex padding to 60 — so the harness has real decks to compare.
 - Then meta-weighted selection (weight each pairing by opponent `meta_share`) and hill-climb.
+
+## #14 — Candidate deck generation (`src/deck_lab/candidates.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/deck_lab/candidates.py`, `scripts/candidates_smoke.py`, `experiments/candidate_decks/*.csv`
+
+### Goal
+Turn the archetype priors into legal, playable 60-card decks (§5 "template + flex") so the
+round-robin (#13) has real meta decks to rank — and so we finally have decks other than the stock
+sample.
+
+### Method
+Per archetype (from `archetype_priors.json`): seed counts = round(expected_copies) (energy incl.,
+capped 4 for non-basic-energy); legalize (≤1 ACE SPEC = keep highest-expected; guarantee ≥1 basic
+Pokémon); reconcile to exactly 60 by residual-greedy — add the largest (expected−current) residual
+first (restores flex cards that rounded to 0) and only pad with the dominant basic energy once no
+positive residual remains; trim the most over-represented card if over 60 (never the last basic).
+
+### Result (`scripts/candidates_smoke.py`)
+```
+8/8 decks: exactly 60, ≤4 copies (non-basic-energy), exactly 1 ACE SPEC, ≥1 basic Pokémon
+ACE SPEC dedup works: e.g. Unfair Stamp / Secret Box / Neo Upper Energy chosen per deck
+all 8 play full games to completion in the SDK (no INVALID / crash), piloted by the v1 brain
+```
+Decks written to `experiments/candidate_decks/`. Honest gaps: mega-greninja-ex is built WITHOUT
+its out-of-pool namesake (CRI-022) → legal but weak; and the N=2 legality games hinted the sample
+deck may beat several candidates — but that's noise + the v1 brain likely misplaying unfamiliar
+archetypes; only a high-N round-robin will give real strength (coin flips lie at small N, #13).
+
+### Next
+- High-N round-robin over the 8 candidates (+ sample) → real matchup matrix + ranking.
+- Meta-weighted selection (weight opponents by `meta_share`); then hill-climb over flex slots.
+- Ship the winner as the first non-sample `deck.csv` (get the agent off the stock deck).
