@@ -835,6 +835,42 @@ v4 vs v1, sample    : 52% (21/19)   ~even  (simple deck needs no deep search)
 - (confirm) extend v4 vs v3 to higher N; (unlock) v4-pilot deck round-robin (do meta decks beat
   sample now?); (train) v4 is now a validated strong teacher → self-play RL is de-risked (§3 roadmap).
 
+## #22 — Deck-unlock re-test under v4 pilot: PARTIAL (`experiments/deck_unlock_v4.*`)
+
+**Date:** 2026-07-07
+**Code:** `scripts/deck_unlock_v4.py` (v4-vs-v4 cross-deck, two independent instances, reduced 1.5 s budget)
+
+### Setup
+The #17 question: do the meta decks beat `sample` when piloted competently? Pit v4(meta deck) vs
+v4(`sample`), N=20/deck, both MCTS at a reduced 1.5 s critical budget (tractability — full 5 s over
+8 decks was ~hours; still far stronger than the heuristics). Two independent v4 instances so the
+per-side opponent trackers don't collide. Mirror sanity-checked at 50% before trusting it.
+
+### Result — a strong pilot narrows the gap but doesn't close it
+```
+meta-deck win rate vs sample:  v1 pilot ~20% avg  →  v3 ~19%  →  v4 ~29% avg
+  rockets-honchkrow  27-32% → 65%   ⭐ the ONLY meta deck that beats sample under v4
+  dragapult-blaziken 17% → 35% ; dusknoir 27→30 ; ex 23→25 ; mega-greninja 13→20 ;
+  alakazam 10→25 ; n-zoroark 20→30 ; slowking-scr 13→5 (regressed)
+sample still beats 7 of 8 meta decks.
+```
+
+### Conclusion — BOTH #15/#17 halves were partly right
+- **The pilot confound was partly real**: a stronger pilot lifts the meta decks (~19%→~29% avg).
+- **The decks are also genuinely weaker**: sample still wins 7/8 even under MCTS.
+- **`rockets-honchkrow` is the one real find** — a special-energy Rocket draw/disruption engine that
+  *beats* sample (65%) when piloted well; MCTS likely pilots its consistency/disruption lines better
+  than the greedy heuristics. First constructed deck to clear sample. (65% at N=20 is ~1.3σ — needs
+  higher-N + full-5 s-budget confirmation before shipping.)
+- Caveat: reduced 1.5 s budget; full 5 s might lift the decks further. The N=6 "dragapult 50%" earlier
+  was noise (25% at N=20).
+
+### Next
+- Confirm `rockets-honchkrow` vs sample at higher N + full 5 s budget → if it holds, it's a genuine
+  ladder candidate (v4 + rockets-honchkrow beats our current sample ship).
+- Otherwise the standing plan holds: v4 is the best pilot, sample the safest deck; begin training
+  foundations (encoder → action featurization → net) with v4 as the self-play teacher.
+
 ## #17 — v3-pilot round-robin: the #15 pilot-confound was WRONG (`candidate_round_robin_v3.*`)
 
 **Date:** 2026-07-07

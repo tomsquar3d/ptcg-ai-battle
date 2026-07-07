@@ -1,0 +1,62 @@
+{
+  "critical_s": 1.5,
+  "n": 20,
+  "decks": {
+    "alakazam-dudunsparce": {
+      "v4": 0.25,
+      "v1": 0.275,
+      "v3": 0.1,
+      "sample": 15,
+      "meta": 5
+    },
+    "dragapult-blaziken": {
+      "v4": 0.35,
+      "v1": 0.1,
+      "v3": 0.167,
+      "sample": 13,
+      "meta": 7
+    },
+    "dragapult-dusknoir": {
+      "v4": 0.3,
+      "v1": 0.175,
+      "v3": 0.267,
+      "meta": 6,
+      "sample": 14
+    },
+    "dragapult-ex": {
+      "v4": 0.25,
+      "v1": 0.175,
+      "v3": 0.233,
+      "sample": 15,
+      "meta": 5
+    },
+    "mega-greninja-ex": {
+      "v4": 0.2,
+      "v1": 0.05,
+      "v3": 0.133,
+      "sample": 16,
+      "meta": 4
+    },
+    "n-zoroark": {
+      "v4": 0.3,
+      "v1": 0.325,
+      "v3": 0.2,
+      "sample": 14,
+      "meta": 6
+    },
+    "rockets-honchkrow": {
+      "v4": 0.65,
+      "v1": 0.325,
+      "v3": 0.267,
+      "meta": 13,
+      "sample": 7
+    },
+    "slowking-scr": {
+      "v4": 0.05,
+      "v1": 0.175,
+      "v3": 0.133,
+      "sample": 19,
+      "meta": 1
+    }
+  }
+}
