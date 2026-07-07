@@ -547,3 +547,36 @@ variants, not false confidence.
 - Feed `default_archetypes()` into a critical-turn determinization sampler (draw opponent hands
   from the MAP template's zone model) and A/B vs the current our-deck-filler determinization.
 - Refine templates from simulator replays once mining exists (human meta will diverge — §6).
+
+## #13 — Round-robin deck harness (`src/deck_lab/round_robin.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/deck_lab/round_robin.py`, `scripts/round_robin_smoke.py`
+
+### Goal
+First brick of the §5 deck-construction pipeline (step 3): measure deck-vs-deck win rate. Candidate
+generation, DCS, and the seven-axis scores are all useless until we can tell whether deck X beats
+deck Y — this is that measurement.
+
+### Method
+Every unordered deck pair plays N games in the **raw SDK** (`battle_start(deck0, deck1)`), both
+sides piloted by the v1 brain (the current best agent). Raw SDK — not the cabt-env subprocess
+`selfplay_test.py` uses — so we can inject two *different* decks per game and switch the brain's
+determinization deck to the acting player each turn. First-player bias cancelled by alternating
+which deck sits in seat 0 across a pairing; results tallied by deck identity; draws count as half.
+Outputs a win-rate matrix + ranking (`round_robin()` API + CLI over a dir of deck CSVs).
+
+### Result (`scripts/round_robin_smoke.py`, self-generated fixtures)
+```
+sample vs sample_mirror (identical decks) : 56.7% / 43.3%  → ~50% within N=30 noise (fair)
+basics_only (evolutions+trainers stripped): 10% win rate, ranks last (loses ~90%)
+72->60 games/pairing, ~14 s for 3 decks @ 30 games/pairing
+```
+First cut at N=24 was too noisy to trust (the *same* matchup swung 33%↔54%) and a mild cripple
+didn't separate — bumped to a severe cripple + N=30 so the signal dominates. **Coin flips lie at
+small N**: §5's ~200 games/pairing is the real target; N is the wall-clock↔confidence knob.
+
+### Next
+- Candidate generation: build legal 60-card decks from the archetype templates (`archetypes.py`)
+  — template core + basic-energy/flex padding to 60 — so the harness has real decks to compare.
+- Then meta-weighted selection (weight each pairing by opponent `meta_share`) and hill-climb.
