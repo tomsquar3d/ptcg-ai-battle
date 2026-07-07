@@ -415,3 +415,102 @@ inside the clock (max 70 ms/move vs the 600 s bank).
 - Proper best-first/MCTS with backtracking (rollout is greedy, so it finds *a* good turn, not the
   optimal); gated on the node budget (experiment #3: ~8k steps/s).
 - Per-term ablation ladder; submit to record the first non-random ladder μ.
+
+## #10 — Opponent-response lookahead (2-ply), a negative result (`submissions/v2/`)
+
+**Date:** 2026-07-06
+**Agent:** `submissions/v2/agent.py` (v1 turn-aware search + opponent-turn rollout)
+**Deck:** SDK sample deck (unchanged from v0/v1)
+
+### Hypothesis
+v1 (#9) is turn-aware but *reply-blind*: it rolls our turn to its end and statically evaluates
+the resulting opponent-to-move state, never simulating the reply. So it can pick a turn that
+scores well and then walk into a KO it never searched. Adding a second ply — roll the opponent's
+best reply to *its* end, then score that post-reply state — should catch those and beat v1.
+
+### Method
+`_greedy_rollout` is perspective-parameterized, so the opponent's turn is the same rollout called
+with the opponent's index (they play to maximize their own static score); `_score_state` already
+scores from our view and negates for opponent-to-move states. New `_rollout_line` composes our
+turn + (toggleable) opponent reply. Budget/clock guards (`NODE_BUDGET`, `MOVE_BUDGET_S`) shared
+across both rollouts; added `OPP_DEPTH_CAP=24`. Toggle `opponent_reply` (default on) recovers
+exact v1 behaviour for a clean ablation. Determinization unchanged (opponent hidden zones = our
+decklist). `agent.STATS` counts rollouts so the harness can assert the 2-ply actually fires.
+
+### Result (`scripts/v2_eval.py`)
+```
+QUALITY  (reply-on vs random, 40): W/L/D 33/7/0 -> 82% (v1 was 85%; same band)
+                                   move mean 40 ms, p95 107 ms, max 249 ms; 0 exceptions
+HEAD-TO-HEAD reply-ON vs reply-OFF (== v1), MIRROR (both play the sample deck):
+   N=60 : 34/26 -> 57%   (looked positive, but only ~1σ)
+   N=200: 95/105 -> 48%
+   pooled 260: 129/260 -> 49.6%   (a coin flip)
+   opponent rollout fired 10,483× over 200 games (NOT inert), 0 exceptions
+INTEGRATION (cabt env vs random, 12): all DONE/DONE, 9/12 wins, max 4.5 s/game
+```
+
+### Takeaways
+- **No measurable benefit over reply-blind v1.** The 57% at N=60 was noise; N=200 settles at ~50%.
+- The 2-ply is provably *working* (rollouts fire, clean, fast) — it just doesn't reorder which of
+  our turns looks best. The evaluator's static threat terms (`threat_next`, `ko_us_now`,
+  `their_output`) already encode "we're exposed" without simulating the reply.
+- Crucially this test is a **mirror**, so the "our-deck determinization is inaccurate" caveat does
+  **not** apply here — the opponent's simulated hand is correct, and it still doesn't help. So the
+  bottleneck is *not* opponent-hand fidelity; it's that a **greedy** opponent reply + static leaf
+  eval adds no signal beyond the eval's threat terms. Real archetype templates alone won't fix this.
+- **Do not ship v2 / do not burn a submission on it.** Keep v1 on the ladder. v2 is retained as
+  correct, cheap, ready-when-it-pays-off infrastructure (behind the `opponent_reply` toggle).
+
+### Next (redirected by this result)
+- Ablate the evaluator's threat terms on/off — quantify how much of "reply awareness" the static
+  terms already buy (likely most of it). This is the writeup spine anyway.
+- Non-greedy search (best-first/MCTS with backtracking): if our own turn-planning is greedy-myopic,
+  a smarter reply has nothing better to punish. Fix the search before re-testing the reply.
+- Deck construction (§5) and real opponent templates remain the bigger untapped levers — but note
+  the mirror result above: templates are for *cross-deck* play, not this bottleneck.
+
+## #11 — Meta priors ingestion + disruption groundwork (`src/priors/`, `src/deck_lab/`)
+
+**Date:** 2026-07-07
+**Code:** `src/priors/{carddb,build_priors}.py`, `src/deck_lab/dcs.py`
+**Data:** TrainerHill (`data/external/trainerhill/`) — 8 archetype skeletons + 15-deck matchup CSV
+
+### Goal
+Turn human-meta lists (TrainerHill) into machine-usable priors + vulnerability profiles and a
+static Disruption Coverage Score — the static half of the disruption programme (strategy §4).
+Data artifacts only; no runtime Disruption Planner yet.
+
+### Method / artifacts
+- **Card mapping** (`carddb.py`): skeleton `set_code` → EN_Card_Data (Expansion, Collection No.)
+  exact join; fallbacks = basic-energy colour alias (EN names energy `Basic {P} Energy`) and
+  normalized-name (delete apostrophes — EN uses a curly ’ that ascii-folds away). Pool = engine
+  `all_card_data()` (EN "Card ID" == engine `cardId`, both 1267). **96% of 301 rows mapped.**
+- `archetype_priors.json` — per card P(copies|archetype) from `pr_` (renormalized; basic energy
+  uses `modal_copies` point mass); `meta_share` from matchup game volumes over the full 15-deck
+  field (our 8 = 71% of field games).
+- `human_matchup_matrix.json` — Beta(1,1)-smoothed P(win|decisive game); mirrors → exactly 0.5.
+- `vulnerability_profiles.json` — expected copies: basic energy, **special energy**, tools,
+  %Pokémon-with-abilities, draw-supporter reliance.
+- `dcs.py` — DCS = Σ meta_share × max-axis effectiveness(our lever strength × their vuln), 4 axes
+  (energy/tool/ability/hand). Rubric documented in the module docstring; named constants for ablation.
+- `experiments/meta_priors_report.md` — coverage table, constructibility ranking, profile table.
+
+### Findings
+- Residual 12 unmapped cards are all the **"CRI" set** — genuinely out of the competition pool,
+  incl. **Mega Greninja ex (CRI-022)**, the namesake of `mega-greninja-ex` (so that archetype is
+  only ~91% constructible and arguably worse — copy-weighting understates a missing key card).
+  Nothing trips the <85% flag, but the report lists every unmapped card per archetype.
+- Profiles cleanly separate archetypes: `alakazam-dudunsparce` = ability engine (62% ability
+  Pokémon, ~0 draw supporters → Watchtower target); `rockets-honchkrow` = special-energy draw
+  engine (8 special energy, 8 draw supporters → Judge/Red-Card + Enhanced-Hammer target).
+- **Special energy correction (reviewer note):** decks like `rockets-honchkrow` run special
+  energy (which also carry effects). Added `special_energy_count` and fold basic+special into the
+  DCS energy axis, so honchkrow/slowking/alakazam correctly read as hammer-exposed instead of
+  energy-immune.
+- Sample deck (v1/v0) DCS = 0.0 — zero disruption package; a synthetic all-levers deck scores
+  0.96 normalized. Baseline established for Deck Lab.
+
+### Next
+- Functional DCS (measured Δ opponent first-attack turn / turns-to-6 with disruption in vs out).
+- Feed priors into the opponent-model archetype templates (`src/ptcg/opponent.py` placeholder).
+- Runtime Disruption Planner (EDV timing) — deferred per task scope.

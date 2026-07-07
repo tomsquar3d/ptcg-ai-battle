@@ -1,0 +1,2080 @@
+{
+  "_meta": {
+    "description": "Human matchup matrix (row deck1 vs column deck2). win_rate_smoothed = Beta(1,1)-smoothed P(win | decisive game); ties excluded from the rate. n_decisive = wins+losses (smoothing confidence).",
+    "beta_alpha": 1.0
+  },
+  "decks": [
+    "alakazam-dudunsparce",
+    "basic-box-m",
+    "beedrill-ex-cri",
+    "crustle-dri",
+    "dragapult-blaziken",
+    "dragapult-dusknoir",
+    "dragapult-ex",
+    "festival-lead",
+    "lucario-hariyama",
+    "mega-greninja-ex",
+    "n-zoroark",
+    "ogerpon-meganium-hydrapple",
+    "rocket-mewtwo-ex",
+    "rockets-honchkrow",
+    "slowking-scr"
+  ],
+  "matrix": {
+    "alakazam-dudunsparce": {
+      "alakazam-dudunsparce": {
+        "wins": 56,
+        "losses": 56,
+        "ties": 6,
+        "total": 62,
+        "win_rate_source": 49.2,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 112
+      },
+      "basic-box-m": {
+        "wins": 23,
+        "losses": 12,
+        "ties": 4,
+        "total": 39,
+        "win_rate_source": 62.4,
+        "win_rate_smoothed": 0.6486,
+        "n_decisive": 35
+      },
+      "beedrill-ex-cri": {
+        "wins": 51,
+        "losses": 33,
+        "ties": 3,
+        "total": 87,
+        "win_rate_source": 59.8,
+        "win_rate_smoothed": 0.6047,
+        "n_decisive": 84
+      },
+      "crustle-dri": {
+        "wins": 24,
+        "losses": 32,
+        "ties": 1,
+        "total": 57,
+        "win_rate_source": 42.7,
+        "win_rate_smoothed": 0.431,
+        "n_decisive": 56
+      },
+      "dragapult-blaziken": {
+        "wins": 36,
+        "losses": 41,
+        "ties": 3,
+        "total": 80,
+        "win_rate_source": 46.2,
+        "win_rate_smoothed": 0.4684,
+        "n_decisive": 77
+      },
+      "dragapult-dusknoir": {
+        "wins": 50,
+        "losses": 70,
+        "ties": 10,
+        "total": 130,
+        "win_rate_source": 41.0,
+        "win_rate_smoothed": 0.418,
+        "n_decisive": 120
+      },
+      "dragapult-ex": {
+        "wins": 53,
+        "losses": 86,
+        "ties": 9,
+        "total": 148,
+        "win_rate_source": 37.8,
+        "win_rate_smoothed": 0.383,
+        "n_decisive": 139
+      },
+      "festival-lead": {
+        "wins": 28,
+        "losses": 23,
+        "ties": 0,
+        "total": 51,
+        "win_rate_source": 54.9,
+        "win_rate_smoothed": 0.5472,
+        "n_decisive": 51
+      },
+      "lucario-hariyama": {
+        "wins": 32,
+        "losses": 17,
+        "ties": 2,
+        "total": 51,
+        "win_rate_source": 64.1,
+        "win_rate_smoothed": 0.6471,
+        "n_decisive": 49
+      },
+      "mega-greninja-ex": {
+        "wins": 49,
+        "losses": 28,
+        "ties": 6,
+        "total": 83,
+        "win_rate_source": 61.4,
+        "win_rate_smoothed": 0.6329,
+        "n_decisive": 77
+      },
+      "n-zoroark": {
+        "wins": 95,
+        "losses": 65,
+        "ties": 12,
+        "total": 172,
+        "win_rate_source": 57.6,
+        "win_rate_smoothed": 0.5926,
+        "n_decisive": 160
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 35,
+        "losses": 18,
+        "ties": 2,
+        "total": 55,
+        "win_rate_source": 64.8,
+        "win_rate_smoothed": 0.6545,
+        "n_decisive": 53
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 10,
+        "losses": 29,
+        "ties": 1,
+        "total": 40,
+        "win_rate_source": 25.8,
+        "win_rate_smoothed": 0.2683,
+        "n_decisive": 39
+      },
+      "rockets-honchkrow": {
+        "wins": 14,
+        "losses": 58,
+        "ties": 4,
+        "total": 76,
+        "win_rate_source": 20.2,
+        "win_rate_smoothed": 0.2027,
+        "n_decisive": 72
+      },
+      "slowking-scr": {
+        "wins": 95,
+        "losses": 38,
+        "ties": 4,
+        "total": 137,
+        "win_rate_source": 70.3,
+        "win_rate_smoothed": 0.7111,
+        "n_decisive": 133
+      }
+    },
+    "basic-box-m": {
+      "alakazam-dudunsparce": {
+        "wins": 12,
+        "losses": 23,
+        "ties": 4,
+        "total": 39,
+        "win_rate_source": 34.2,
+        "win_rate_smoothed": 0.3514,
+        "n_decisive": 35
+      },
+      "basic-box-m": {
+        "wins": 10,
+        "losses": 10,
+        "ties": 0,
+        "total": 10,
+        "win_rate_source": 50.0,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 20
+      },
+      "beedrill-ex-cri": {
+        "wins": 11,
+        "losses": 11,
+        "ties": 1,
+        "total": 23,
+        "win_rate_source": 49.3,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 22
+      },
+      "crustle-dri": {
+        "wins": 9,
+        "losses": 14,
+        "ties": 1,
+        "total": 24,
+        "win_rate_source": 38.9,
+        "win_rate_smoothed": 0.4,
+        "n_decisive": 23
+      },
+      "dragapult-blaziken": {
+        "wins": 9,
+        "losses": 11,
+        "ties": 2,
+        "total": 22,
+        "win_rate_source": 43.9,
+        "win_rate_smoothed": 0.4545,
+        "n_decisive": 20
+      },
+      "dragapult-dusknoir": {
+        "wins": 43,
+        "losses": 27,
+        "ties": 3,
+        "total": 73,
+        "win_rate_source": 60.3,
+        "win_rate_smoothed": 0.6111,
+        "n_decisive": 70
+      },
+      "dragapult-ex": {
+        "wins": 42,
+        "losses": 28,
+        "ties": 3,
+        "total": 73,
+        "win_rate_source": 58.9,
+        "win_rate_smoothed": 0.5972,
+        "n_decisive": 70
+      },
+      "festival-lead": {
+        "wins": 8,
+        "losses": 8,
+        "ties": 2,
+        "total": 18,
+        "win_rate_source": 48.1,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 16
+      },
+      "lucario-hariyama": {
+        "wins": 10,
+        "losses": 10,
+        "ties": 1,
+        "total": 21,
+        "win_rate_source": 49.2,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 20
+      },
+      "mega-greninja-ex": {
+        "wins": 25,
+        "losses": 8,
+        "ties": 3,
+        "total": 36,
+        "win_rate_source": 72.2,
+        "win_rate_smoothed": 0.7429,
+        "n_decisive": 33
+      },
+      "n-zoroark": {
+        "wins": 28,
+        "losses": 23,
+        "ties": 2,
+        "total": 53,
+        "win_rate_source": 54.1,
+        "win_rate_smoothed": 0.5472,
+        "n_decisive": 51
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 16,
+        "losses": 15,
+        "ties": 3,
+        "total": 34,
+        "win_rate_source": 50.0,
+        "win_rate_smoothed": 0.5152,
+        "n_decisive": 31
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 10,
+        "losses": 3,
+        "ties": 3,
+        "total": 16,
+        "win_rate_source": 68.8,
+        "win_rate_smoothed": 0.7333,
+        "n_decisive": 13
+      },
+      "rockets-honchkrow": {
+        "wins": 10,
+        "losses": 17,
+        "ties": 2,
+        "total": 29,
+        "win_rate_source": 36.8,
+        "win_rate_smoothed": 0.3793,
+        "n_decisive": 27
+      },
+      "slowking-scr": {
+        "wins": 27,
+        "losses": 25,
+        "ties": 2,
+        "total": 54,
+        "win_rate_source": 51.2,
+        "win_rate_smoothed": 0.5185,
+        "n_decisive": 52
+      }
+    },
+    "beedrill-ex-cri": {
+      "alakazam-dudunsparce": {
+        "wins": 33,
+        "losses": 51,
+        "ties": 3,
+        "total": 87,
+        "win_rate_source": 39.1,
+        "win_rate_smoothed": 0.3953,
+        "n_decisive": 84
+      },
+      "basic-box-m": {
+        "wins": 11,
+        "losses": 11,
+        "ties": 1,
+        "total": 23,
+        "win_rate_source": 49.3,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 22
+      },
+      "beedrill-ex-cri": {
+        "wins": 18,
+        "losses": 18,
+        "ties": 2,
+        "total": 20,
+        "win_rate_source": 49.1,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 36
+      },
+      "crustle-dri": {
+        "wins": 2,
+        "losses": 25,
+        "ties": 0,
+        "total": 27,
+        "win_rate_source": 7.4,
+        "win_rate_smoothed": 0.1034,
+        "n_decisive": 27
+      },
+      "dragapult-blaziken": {
+        "wins": 19,
+        "losses": 23,
+        "ties": 2,
+        "total": 44,
+        "win_rate_source": 44.7,
+        "win_rate_smoothed": 0.4545,
+        "n_decisive": 42
+      },
+      "dragapult-dusknoir": {
+        "wins": 26,
+        "losses": 43,
+        "ties": 5,
+        "total": 74,
+        "win_rate_source": 37.4,
+        "win_rate_smoothed": 0.3803,
+        "n_decisive": 69
+      },
+      "dragapult-ex": {
+        "wins": 41,
+        "losses": 72,
+        "ties": 7,
+        "total": 120,
+        "win_rate_source": 36.1,
+        "win_rate_smoothed": 0.3652,
+        "n_decisive": 113
+      },
+      "festival-lead": {
+        "wins": 15,
+        "losses": 12,
+        "ties": 6,
+        "total": 33,
+        "win_rate_source": 51.5,
+        "win_rate_smoothed": 0.5517,
+        "n_decisive": 27
+      },
+      "lucario-hariyama": {
+        "wins": 10,
+        "losses": 21,
+        "ties": 1,
+        "total": 32,
+        "win_rate_source": 32.3,
+        "win_rate_smoothed": 0.3333,
+        "n_decisive": 31
+      },
+      "mega-greninja-ex": {
+        "wins": 28,
+        "losses": 26,
+        "ties": 3,
+        "total": 57,
+        "win_rate_source": 50.9,
+        "win_rate_smoothed": 0.5179,
+        "n_decisive": 54
+      },
+      "n-zoroark": {
+        "wins": 75,
+        "losses": 27,
+        "ties": 8,
+        "total": 110,
+        "win_rate_source": 70.6,
+        "win_rate_smoothed": 0.7308,
+        "n_decisive": 102
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 23,
+        "losses": 12,
+        "ties": 4,
+        "total": 39,
+        "win_rate_source": 62.4,
+        "win_rate_smoothed": 0.6486,
+        "n_decisive": 35
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 17,
+        "losses": 5,
+        "ties": 2,
+        "total": 24,
+        "win_rate_source": 73.6,
+        "win_rate_smoothed": 0.75,
+        "n_decisive": 22
+      },
+      "rockets-honchkrow": {
+        "wins": 20,
+        "losses": 22,
+        "ties": 5,
+        "total": 47,
+        "win_rate_source": 46.1,
+        "win_rate_smoothed": 0.4773,
+        "n_decisive": 42
+      },
+      "slowking-scr": {
+        "wins": 34,
+        "losses": 58,
+        "ties": 5,
+        "total": 97,
+        "win_rate_source": 36.8,
+        "win_rate_smoothed": 0.3723,
+        "n_decisive": 92
+      }
+    },
+    "crustle-dri": {
+      "alakazam-dudunsparce": {
+        "wins": 32,
+        "losses": 24,
+        "ties": 1,
+        "total": 57,
+        "win_rate_source": 56.7,
+        "win_rate_smoothed": 0.569,
+        "n_decisive": 56
+      },
+      "basic-box-m": {
+        "wins": 14,
+        "losses": 9,
+        "ties": 1,
+        "total": 24,
+        "win_rate_source": 59.7,
+        "win_rate_smoothed": 0.6,
+        "n_decisive": 23
+      },
+      "beedrill-ex-cri": {
+        "wins": 25,
+        "losses": 2,
+        "ties": 0,
+        "total": 27,
+        "win_rate_source": 92.6,
+        "win_rate_smoothed": 0.8966,
+        "n_decisive": 27
+      },
+      "crustle-dri": {
+        "wins": 17,
+        "losses": 17,
+        "ties": 1,
+        "total": 18,
+        "win_rate_source": 49.5,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 34
+      },
+      "dragapult-blaziken": {
+        "wins": 21,
+        "losses": 16,
+        "ties": 8,
+        "total": 45,
+        "win_rate_source": 52.6,
+        "win_rate_smoothed": 0.5641,
+        "n_decisive": 37
+      },
+      "dragapult-dusknoir": {
+        "wins": 44,
+        "losses": 37,
+        "ties": 4,
+        "total": 85,
+        "win_rate_source": 53.3,
+        "win_rate_smoothed": 0.5422,
+        "n_decisive": 81
+      },
+      "dragapult-ex": {
+        "wins": 48,
+        "losses": 28,
+        "ties": 8,
+        "total": 84,
+        "win_rate_source": 60.3,
+        "win_rate_smoothed": 0.6282,
+        "n_decisive": 76
+      },
+      "festival-lead": {
+        "wins": 16,
+        "losses": 7,
+        "ties": 5,
+        "total": 28,
+        "win_rate_source": 63.1,
+        "win_rate_smoothed": 0.68,
+        "n_decisive": 23
+      },
+      "lucario-hariyama": {
+        "wins": 9,
+        "losses": 12,
+        "ties": 0,
+        "total": 21,
+        "win_rate_source": 42.9,
+        "win_rate_smoothed": 0.4348,
+        "n_decisive": 21
+      },
+      "mega-greninja-ex": {
+        "wins": 37,
+        "losses": 21,
+        "ties": 3,
+        "total": 61,
+        "win_rate_source": 62.3,
+        "win_rate_smoothed": 0.6333,
+        "n_decisive": 58
+      },
+      "n-zoroark": {
+        "wins": 51,
+        "losses": 28,
+        "ties": 3,
+        "total": 82,
+        "win_rate_source": 63.4,
+        "win_rate_smoothed": 0.642,
+        "n_decisive": 79
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 20,
+        "losses": 21,
+        "ties": 2,
+        "total": 43,
+        "win_rate_source": 48.1,
+        "win_rate_smoothed": 0.4884,
+        "n_decisive": 41
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 4,
+        "losses": 13,
+        "ties": 2,
+        "total": 19,
+        "win_rate_source": 24.6,
+        "win_rate_smoothed": 0.2632,
+        "n_decisive": 17
+      },
+      "rockets-honchkrow": {
+        "wins": 8,
+        "losses": 28,
+        "ties": 2,
+        "total": 38,
+        "win_rate_source": 22.8,
+        "win_rate_smoothed": 0.2368,
+        "n_decisive": 36
+      },
+      "slowking-scr": {
+        "wins": 28,
+        "losses": 41,
+        "ties": 1,
+        "total": 70,
+        "win_rate_source": 40.5,
+        "win_rate_smoothed": 0.4085,
+        "n_decisive": 69
+      }
+    },
+    "dragapult-blaziken": {
+      "alakazam-dudunsparce": {
+        "wins": 41,
+        "losses": 36,
+        "ties": 3,
+        "total": 80,
+        "win_rate_source": 52.5,
+        "win_rate_smoothed": 0.5316,
+        "n_decisive": 77
+      },
+      "basic-box-m": {
+        "wins": 11,
+        "losses": 9,
+        "ties": 2,
+        "total": 22,
+        "win_rate_source": 53.0,
+        "win_rate_smoothed": 0.5455,
+        "n_decisive": 20
+      },
+      "beedrill-ex-cri": {
+        "wins": 23,
+        "losses": 19,
+        "ties": 2,
+        "total": 44,
+        "win_rate_source": 53.8,
+        "win_rate_smoothed": 0.5455,
+        "n_decisive": 42
+      },
+      "crustle-dri": {
+        "wins": 16,
+        "losses": 21,
+        "ties": 8,
+        "total": 45,
+        "win_rate_source": 41.5,
+        "win_rate_smoothed": 0.4359,
+        "n_decisive": 37
+      },
+      "dragapult-blaziken": {
+        "wins": 27,
+        "losses": 27,
+        "ties": 1,
+        "total": 28,
+        "win_rate_source": 49.7,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 54
+      },
+      "dragapult-dusknoir": {
+        "wins": 40,
+        "losses": 54,
+        "ties": 14,
+        "total": 108,
+        "win_rate_source": 41.4,
+        "win_rate_smoothed": 0.4271,
+        "n_decisive": 94
+      },
+      "dragapult-ex": {
+        "wins": 56,
+        "losses": 64,
+        "ties": 6,
+        "total": 126,
+        "win_rate_source": 46.0,
+        "win_rate_smoothed": 0.4672,
+        "n_decisive": 120
+      },
+      "festival-lead": {
+        "wins": 26,
+        "losses": 10,
+        "ties": 4,
+        "total": 40,
+        "win_rate_source": 68.3,
+        "win_rate_smoothed": 0.7105,
+        "n_decisive": 36
+      },
+      "lucario-hariyama": {
+        "wins": 17,
+        "losses": 13,
+        "ties": 2,
+        "total": 32,
+        "win_rate_source": 55.2,
+        "win_rate_smoothed": 0.5625,
+        "n_decisive": 30
+      },
+      "mega-greninja-ex": {
+        "wins": 33,
+        "losses": 22,
+        "ties": 3,
+        "total": 58,
+        "win_rate_source": 58.6,
+        "win_rate_smoothed": 0.5965,
+        "n_decisive": 55
+      },
+      "n-zoroark": {
+        "wins": 48,
+        "losses": 51,
+        "ties": 6,
+        "total": 105,
+        "win_rate_source": 47.6,
+        "win_rate_smoothed": 0.4851,
+        "n_decisive": 99
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 22,
+        "losses": 15,
+        "ties": 3,
+        "total": 40,
+        "win_rate_source": 57.5,
+        "win_rate_smoothed": 0.5897,
+        "n_decisive": 37
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 19,
+        "losses": 16,
+        "ties": 0,
+        "total": 35,
+        "win_rate_source": 54.3,
+        "win_rate_smoothed": 0.5405,
+        "n_decisive": 35
+      },
+      "rockets-honchkrow": {
+        "wins": 19,
+        "losses": 18,
+        "ties": 1,
+        "total": 38,
+        "win_rate_source": 50.9,
+        "win_rate_smoothed": 0.5128,
+        "n_decisive": 37
+      },
+      "slowking-scr": {
+        "wins": 38,
+        "losses": 44,
+        "ties": 4,
+        "total": 86,
+        "win_rate_source": 45.7,
+        "win_rate_smoothed": 0.4643,
+        "n_decisive": 82
+      }
+    },
+    "dragapult-dusknoir": {
+      "alakazam-dudunsparce": {
+        "wins": 70,
+        "losses": 50,
+        "ties": 10,
+        "total": 130,
+        "win_rate_source": 56.4,
+        "win_rate_smoothed": 0.582,
+        "n_decisive": 120
+      },
+      "basic-box-m": {
+        "wins": 27,
+        "losses": 43,
+        "ties": 3,
+        "total": 73,
+        "win_rate_source": 38.4,
+        "win_rate_smoothed": 0.3889,
+        "n_decisive": 70
+      },
+      "beedrill-ex-cri": {
+        "wins": 43,
+        "losses": 26,
+        "ties": 5,
+        "total": 74,
+        "win_rate_source": 60.4,
+        "win_rate_smoothed": 0.6197,
+        "n_decisive": 69
+      },
+      "crustle-dri": {
+        "wins": 37,
+        "losses": 44,
+        "ties": 4,
+        "total": 85,
+        "win_rate_source": 45.1,
+        "win_rate_smoothed": 0.4578,
+        "n_decisive": 81
+      },
+      "dragapult-blaziken": {
+        "wins": 54,
+        "losses": 40,
+        "ties": 14,
+        "total": 108,
+        "win_rate_source": 54.3,
+        "win_rate_smoothed": 0.5729,
+        "n_decisive": 94
+      },
+      "dragapult-dusknoir": {
+        "wins": 101,
+        "losses": 101,
+        "ties": 7,
+        "total": 108,
+        "win_rate_source": 49.4,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 202
+      },
+      "dragapult-ex": {
+        "wins": 94,
+        "losses": 112,
+        "ties": 10,
+        "total": 216,
+        "win_rate_source": 45.1,
+        "win_rate_smoothed": 0.4567,
+        "n_decisive": 206
+      },
+      "festival-lead": {
+        "wins": 33,
+        "losses": 28,
+        "ties": 6,
+        "total": 67,
+        "win_rate_source": 52.2,
+        "win_rate_smoothed": 0.5397,
+        "n_decisive": 61
+      },
+      "lucario-hariyama": {
+        "wins": 35,
+        "losses": 30,
+        "ties": 5,
+        "total": 70,
+        "win_rate_source": 52.4,
+        "win_rate_smoothed": 0.5373,
+        "n_decisive": 65
+      },
+      "mega-greninja-ex": {
+        "wins": 78,
+        "losses": 46,
+        "ties": 6,
+        "total": 130,
+        "win_rate_source": 61.5,
+        "win_rate_smoothed": 0.627,
+        "n_decisive": 124
+      },
+      "n-zoroark": {
+        "wins": 110,
+        "losses": 117,
+        "ties": 11,
+        "total": 238,
+        "win_rate_source": 47.8,
+        "win_rate_smoothed": 0.4847,
+        "n_decisive": 227
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 41,
+        "losses": 34,
+        "ties": 3,
+        "total": 78,
+        "win_rate_source": 53.8,
+        "win_rate_smoothed": 0.5455,
+        "n_decisive": 75
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 32,
+        "losses": 26,
+        "ties": 0,
+        "total": 58,
+        "win_rate_source": 55.2,
+        "win_rate_smoothed": 0.55,
+        "n_decisive": 58
+      },
+      "rockets-honchkrow": {
+        "wins": 53,
+        "losses": 47,
+        "ties": 6,
+        "total": 106,
+        "win_rate_source": 51.9,
+        "win_rate_smoothed": 0.5294,
+        "n_decisive": 100
+      },
+      "slowking-scr": {
+        "wins": 79,
+        "losses": 109,
+        "ties": 4,
+        "total": 192,
+        "win_rate_source": 41.8,
+        "win_rate_smoothed": 0.4211,
+        "n_decisive": 188
+      }
+    },
+    "dragapult-ex": {
+      "alakazam-dudunsparce": {
+        "wins": 86,
+        "losses": 53,
+        "ties": 9,
+        "total": 148,
+        "win_rate_source": 60.1,
+        "win_rate_smoothed": 0.617,
+        "n_decisive": 139
+      },
+      "basic-box-m": {
+        "wins": 28,
+        "losses": 42,
+        "ties": 3,
+        "total": 73,
+        "win_rate_source": 39.7,
+        "win_rate_smoothed": 0.4028,
+        "n_decisive": 70
+      },
+      "beedrill-ex-cri": {
+        "wins": 72,
+        "losses": 41,
+        "ties": 7,
+        "total": 120,
+        "win_rate_source": 61.9,
+        "win_rate_smoothed": 0.6348,
+        "n_decisive": 113
+      },
+      "crustle-dri": {
+        "wins": 28,
+        "losses": 48,
+        "ties": 8,
+        "total": 84,
+        "win_rate_source": 36.5,
+        "win_rate_smoothed": 0.3718,
+        "n_decisive": 76
+      },
+      "dragapult-blaziken": {
+        "wins": 64,
+        "losses": 56,
+        "ties": 6,
+        "total": 126,
+        "win_rate_source": 52.4,
+        "win_rate_smoothed": 0.5328,
+        "n_decisive": 120
+      },
+      "dragapult-dusknoir": {
+        "wins": 112,
+        "losses": 94,
+        "ties": 10,
+        "total": 216,
+        "win_rate_source": 53.4,
+        "win_rate_smoothed": 0.5433,
+        "n_decisive": 206
+      },
+      "dragapult-ex": {
+        "wins": 97,
+        "losses": 97,
+        "ties": 1,
+        "total": 98,
+        "win_rate_source": 49.9,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 194
+      },
+      "festival-lead": {
+        "wins": 50,
+        "losses": 29,
+        "ties": 8,
+        "total": 87,
+        "win_rate_source": 60.5,
+        "win_rate_smoothed": 0.6296,
+        "n_decisive": 79
+      },
+      "lucario-hariyama": {
+        "wins": 32,
+        "losses": 27,
+        "ties": 6,
+        "total": 65,
+        "win_rate_source": 52.3,
+        "win_rate_smoothed": 0.541,
+        "n_decisive": 59
+      },
+      "mega-greninja-ex": {
+        "wins": 81,
+        "losses": 47,
+        "ties": 3,
+        "total": 131,
+        "win_rate_source": 62.6,
+        "win_rate_smoothed": 0.6308,
+        "n_decisive": 128
+      },
+      "n-zoroark": {
+        "wins": 107,
+        "losses": 105,
+        "ties": 10,
+        "total": 222,
+        "win_rate_source": 49.7,
+        "win_rate_smoothed": 0.5047,
+        "n_decisive": 212
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 41,
+        "losses": 38,
+        "ties": 2,
+        "total": 81,
+        "win_rate_source": 51.4,
+        "win_rate_smoothed": 0.5185,
+        "n_decisive": 79
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 24,
+        "losses": 28,
+        "ties": 0,
+        "total": 52,
+        "win_rate_source": 46.2,
+        "win_rate_smoothed": 0.463,
+        "n_decisive": 52
+      },
+      "rockets-honchkrow": {
+        "wins": 47,
+        "losses": 42,
+        "ties": 6,
+        "total": 95,
+        "win_rate_source": 51.6,
+        "win_rate_smoothed": 0.5275,
+        "n_decisive": 89
+      },
+      "slowking-scr": {
+        "wins": 88,
+        "losses": 97,
+        "ties": 6,
+        "total": 191,
+        "win_rate_source": 47.1,
+        "win_rate_smoothed": 0.4759,
+        "n_decisive": 185
+      }
+    },
+    "festival-lead": {
+      "alakazam-dudunsparce": {
+        "wins": 23,
+        "losses": 28,
+        "ties": 0,
+        "total": 51,
+        "win_rate_source": 45.1,
+        "win_rate_smoothed": 0.4528,
+        "n_decisive": 51
+      },
+      "basic-box-m": {
+        "wins": 8,
+        "losses": 8,
+        "ties": 2,
+        "total": 18,
+        "win_rate_source": 48.1,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 16
+      },
+      "beedrill-ex-cri": {
+        "wins": 12,
+        "losses": 15,
+        "ties": 6,
+        "total": 33,
+        "win_rate_source": 42.4,
+        "win_rate_smoothed": 0.4483,
+        "n_decisive": 27
+      },
+      "crustle-dri": {
+        "wins": 7,
+        "losses": 16,
+        "ties": 5,
+        "total": 28,
+        "win_rate_source": 31.0,
+        "win_rate_smoothed": 0.32,
+        "n_decisive": 23
+      },
+      "dragapult-blaziken": {
+        "wins": 10,
+        "losses": 26,
+        "ties": 4,
+        "total": 40,
+        "win_rate_source": 28.3,
+        "win_rate_smoothed": 0.2895,
+        "n_decisive": 36
+      },
+      "dragapult-dusknoir": {
+        "wins": 28,
+        "losses": 33,
+        "ties": 6,
+        "total": 67,
+        "win_rate_source": 44.8,
+        "win_rate_smoothed": 0.4603,
+        "n_decisive": 61
+      },
+      "dragapult-ex": {
+        "wins": 29,
+        "losses": 50,
+        "ties": 8,
+        "total": 87,
+        "win_rate_source": 36.4,
+        "win_rate_smoothed": 0.3704,
+        "n_decisive": 79
+      },
+      "festival-lead": {
+        "wins": 13,
+        "losses": 13,
+        "ties": 1,
+        "total": 14,
+        "win_rate_source": 49.4,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 26
+      },
+      "lucario-hariyama": {
+        "wins": 11,
+        "losses": 10,
+        "ties": 0,
+        "total": 21,
+        "win_rate_source": 52.4,
+        "win_rate_smoothed": 0.5217,
+        "n_decisive": 21
+      },
+      "mega-greninja-ex": {
+        "wins": 25,
+        "losses": 25,
+        "ties": 2,
+        "total": 52,
+        "win_rate_source": 49.4,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 50
+      },
+      "n-zoroark": {
+        "wins": 46,
+        "losses": 25,
+        "ties": 3,
+        "total": 74,
+        "win_rate_source": 63.5,
+        "win_rate_smoothed": 0.6438,
+        "n_decisive": 71
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 18,
+        "losses": 13,
+        "ties": 2,
+        "total": 33,
+        "win_rate_source": 56.6,
+        "win_rate_smoothed": 0.5758,
+        "n_decisive": 31
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 6,
+        "losses": 10,
+        "ties": 0,
+        "total": 16,
+        "win_rate_source": 37.5,
+        "win_rate_smoothed": 0.3889,
+        "n_decisive": 16
+      },
+      "rockets-honchkrow": {
+        "wins": 20,
+        "losses": 10,
+        "ties": 3,
+        "total": 33,
+        "win_rate_source": 63.6,
+        "win_rate_smoothed": 0.6562,
+        "n_decisive": 30
+      },
+      "slowking-scr": {
+        "wins": 25,
+        "losses": 20,
+        "ties": 0,
+        "total": 45,
+        "win_rate_source": 55.6,
+        "win_rate_smoothed": 0.5532,
+        "n_decisive": 45
+      }
+    },
+    "lucario-hariyama": {
+      "alakazam-dudunsparce": {
+        "wins": 17,
+        "losses": 32,
+        "ties": 2,
+        "total": 51,
+        "win_rate_source": 34.6,
+        "win_rate_smoothed": 0.3529,
+        "n_decisive": 49
+      },
+      "basic-box-m": {
+        "wins": 10,
+        "losses": 10,
+        "ties": 1,
+        "total": 21,
+        "win_rate_source": 49.2,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 20
+      },
+      "beedrill-ex-cri": {
+        "wins": 21,
+        "losses": 10,
+        "ties": 1,
+        "total": 32,
+        "win_rate_source": 66.7,
+        "win_rate_smoothed": 0.6667,
+        "n_decisive": 31
+      },
+      "crustle-dri": {
+        "wins": 12,
+        "losses": 9,
+        "ties": 0,
+        "total": 21,
+        "win_rate_source": 57.1,
+        "win_rate_smoothed": 0.5652,
+        "n_decisive": 21
+      },
+      "dragapult-blaziken": {
+        "wins": 13,
+        "losses": 17,
+        "ties": 2,
+        "total": 32,
+        "win_rate_source": 42.7,
+        "win_rate_smoothed": 0.4375,
+        "n_decisive": 30
+      },
+      "dragapult-dusknoir": {
+        "wins": 30,
+        "losses": 35,
+        "ties": 5,
+        "total": 70,
+        "win_rate_source": 45.2,
+        "win_rate_smoothed": 0.4627,
+        "n_decisive": 65
+      },
+      "dragapult-ex": {
+        "wins": 27,
+        "losses": 32,
+        "ties": 6,
+        "total": 65,
+        "win_rate_source": 44.6,
+        "win_rate_smoothed": 0.459,
+        "n_decisive": 59
+      },
+      "festival-lead": {
+        "wins": 10,
+        "losses": 11,
+        "ties": 0,
+        "total": 21,
+        "win_rate_source": 47.6,
+        "win_rate_smoothed": 0.4783,
+        "n_decisive": 21
+      },
+      "lucario-hariyama": {
+        "wins": 11,
+        "losses": 11,
+        "ties": 0,
+        "total": 11,
+        "win_rate_source": 50.0,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 22
+      },
+      "mega-greninja-ex": {
+        "wins": 31,
+        "losses": 19,
+        "ties": 5,
+        "total": 55,
+        "win_rate_source": 59.4,
+        "win_rate_smoothed": 0.6154,
+        "n_decisive": 50
+      },
+      "n-zoroark": {
+        "wins": 32,
+        "losses": 18,
+        "ties": 4,
+        "total": 54,
+        "win_rate_source": 61.7,
+        "win_rate_smoothed": 0.6346,
+        "n_decisive": 50
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 9,
+        "losses": 20,
+        "ties": 1,
+        "total": 30,
+        "win_rate_source": 31.1,
+        "win_rate_smoothed": 0.3226,
+        "n_decisive": 29
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 15,
+        "losses": 6,
+        "ties": 1,
+        "total": 22,
+        "win_rate_source": 69.7,
+        "win_rate_smoothed": 0.6957,
+        "n_decisive": 21
+      },
+      "rockets-honchkrow": {
+        "wins": 4,
+        "losses": 11,
+        "ties": 1,
+        "total": 16,
+        "win_rate_source": 27.1,
+        "win_rate_smoothed": 0.2941,
+        "n_decisive": 15
+      },
+      "slowking-scr": {
+        "wins": 23,
+        "losses": 45,
+        "ties": 2,
+        "total": 70,
+        "win_rate_source": 33.8,
+        "win_rate_smoothed": 0.3429,
+        "n_decisive": 68
+      }
+    },
+    "mega-greninja-ex": {
+      "alakazam-dudunsparce": {
+        "wins": 28,
+        "losses": 49,
+        "ties": 6,
+        "total": 83,
+        "win_rate_source": 36.1,
+        "win_rate_smoothed": 0.3671,
+        "n_decisive": 77
+      },
+      "basic-box-m": {
+        "wins": 8,
+        "losses": 25,
+        "ties": 3,
+        "total": 36,
+        "win_rate_source": 25.0,
+        "win_rate_smoothed": 0.2571,
+        "n_decisive": 33
+      },
+      "beedrill-ex-cri": {
+        "wins": 26,
+        "losses": 28,
+        "ties": 3,
+        "total": 57,
+        "win_rate_source": 47.4,
+        "win_rate_smoothed": 0.4821,
+        "n_decisive": 54
+      },
+      "crustle-dri": {
+        "wins": 21,
+        "losses": 37,
+        "ties": 3,
+        "total": 61,
+        "win_rate_source": 36.1,
+        "win_rate_smoothed": 0.3667,
+        "n_decisive": 58
+      },
+      "dragapult-blaziken": {
+        "wins": 22,
+        "losses": 33,
+        "ties": 3,
+        "total": 58,
+        "win_rate_source": 39.7,
+        "win_rate_smoothed": 0.4035,
+        "n_decisive": 55
+      },
+      "dragapult-dusknoir": {
+        "wins": 46,
+        "losses": 78,
+        "ties": 6,
+        "total": 130,
+        "win_rate_source": 36.9,
+        "win_rate_smoothed": 0.373,
+        "n_decisive": 124
+      },
+      "dragapult-ex": {
+        "wins": 47,
+        "losses": 81,
+        "ties": 3,
+        "total": 131,
+        "win_rate_source": 36.6,
+        "win_rate_smoothed": 0.3692,
+        "n_decisive": 128
+      },
+      "festival-lead": {
+        "wins": 25,
+        "losses": 25,
+        "ties": 2,
+        "total": 52,
+        "win_rate_source": 49.4,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 50
+      },
+      "lucario-hariyama": {
+        "wins": 19,
+        "losses": 31,
+        "ties": 5,
+        "total": 55,
+        "win_rate_source": 37.6,
+        "win_rate_smoothed": 0.3846,
+        "n_decisive": 50
+      },
+      "mega-greninja-ex": {
+        "wins": 41,
+        "losses": 41,
+        "ties": 6,
+        "total": 47,
+        "win_rate_source": 48.9,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 82
+      },
+      "n-zoroark": {
+        "wins": 63,
+        "losses": 91,
+        "ties": 10,
+        "total": 164,
+        "win_rate_source": 40.4,
+        "win_rate_smoothed": 0.4103,
+        "n_decisive": 154
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 18,
+        "losses": 34,
+        "ties": 5,
+        "total": 57,
+        "win_rate_source": 34.5,
+        "win_rate_smoothed": 0.3519,
+        "n_decisive": 52
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 19,
+        "losses": 15,
+        "ties": 1,
+        "total": 35,
+        "win_rate_source": 55.2,
+        "win_rate_smoothed": 0.5556,
+        "n_decisive": 34
+      },
+      "rockets-honchkrow": {
+        "wins": 35,
+        "losses": 29,
+        "ties": 4,
+        "total": 68,
+        "win_rate_source": 53.4,
+        "win_rate_smoothed": 0.5455,
+        "n_decisive": 64
+      },
+      "slowking-scr": {
+        "wins": 54,
+        "losses": 62,
+        "ties": 8,
+        "total": 124,
+        "win_rate_source": 45.7,
+        "win_rate_smoothed": 0.4661,
+        "n_decisive": 116
+      }
+    },
+    "n-zoroark": {
+      "alakazam-dudunsparce": {
+        "wins": 65,
+        "losses": 95,
+        "ties": 12,
+        "total": 172,
+        "win_rate_source": 40.1,
+        "win_rate_smoothed": 0.4074,
+        "n_decisive": 160
+      },
+      "basic-box-m": {
+        "wins": 23,
+        "losses": 28,
+        "ties": 2,
+        "total": 53,
+        "win_rate_source": 44.7,
+        "win_rate_smoothed": 0.4528,
+        "n_decisive": 51
+      },
+      "beedrill-ex-cri": {
+        "wins": 27,
+        "losses": 75,
+        "ties": 8,
+        "total": 110,
+        "win_rate_source": 27.0,
+        "win_rate_smoothed": 0.2692,
+        "n_decisive": 102
+      },
+      "crustle-dri": {
+        "wins": 28,
+        "losses": 51,
+        "ties": 3,
+        "total": 82,
+        "win_rate_source": 35.4,
+        "win_rate_smoothed": 0.358,
+        "n_decisive": 79
+      },
+      "dragapult-blaziken": {
+        "wins": 51,
+        "losses": 48,
+        "ties": 6,
+        "total": 105,
+        "win_rate_source": 50.5,
+        "win_rate_smoothed": 0.5149,
+        "n_decisive": 99
+      },
+      "dragapult-dusknoir": {
+        "wins": 117,
+        "losses": 110,
+        "ties": 11,
+        "total": 238,
+        "win_rate_source": 50.7,
+        "win_rate_smoothed": 0.5153,
+        "n_decisive": 227
+      },
+      "dragapult-ex": {
+        "wins": 105,
+        "losses": 107,
+        "ties": 10,
+        "total": 222,
+        "win_rate_source": 48.8,
+        "win_rate_smoothed": 0.4953,
+        "n_decisive": 212
+      },
+      "festival-lead": {
+        "wins": 25,
+        "losses": 46,
+        "ties": 3,
+        "total": 74,
+        "win_rate_source": 35.1,
+        "win_rate_smoothed": 0.3562,
+        "n_decisive": 71
+      },
+      "lucario-hariyama": {
+        "wins": 18,
+        "losses": 32,
+        "ties": 4,
+        "total": 54,
+        "win_rate_source": 35.8,
+        "win_rate_smoothed": 0.3654,
+        "n_decisive": 50
+      },
+      "mega-greninja-ex": {
+        "wins": 91,
+        "losses": 63,
+        "ties": 10,
+        "total": 164,
+        "win_rate_source": 57.5,
+        "win_rate_smoothed": 0.5897,
+        "n_decisive": 154
+      },
+      "n-zoroark": {
+        "wins": 117,
+        "losses": 117,
+        "ties": 9,
+        "total": 126,
+        "win_rate_source": 49.4,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 234
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 30,
+        "losses": 58,
+        "ties": 3,
+        "total": 91,
+        "win_rate_source": 34.1,
+        "win_rate_smoothed": 0.3444,
+        "n_decisive": 88
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 21,
+        "losses": 35,
+        "ties": 3,
+        "total": 59,
+        "win_rate_source": 37.3,
+        "win_rate_smoothed": 0.3793,
+        "n_decisive": 56
+      },
+      "rockets-honchkrow": {
+        "wins": 72,
+        "losses": 60,
+        "ties": 5,
+        "total": 137,
+        "win_rate_source": 53.8,
+        "win_rate_smoothed": 0.5448,
+        "n_decisive": 132
+      },
+      "slowking-scr": {
+        "wins": 87,
+        "losses": 95,
+        "ties": 3,
+        "total": 185,
+        "win_rate_source": 47.6,
+        "win_rate_smoothed": 0.4783,
+        "n_decisive": 182
+      }
+    },
+    "ogerpon-meganium-hydrapple": {
+      "alakazam-dudunsparce": {
+        "wins": 18,
+        "losses": 35,
+        "ties": 2,
+        "total": 55,
+        "win_rate_source": 33.9,
+        "win_rate_smoothed": 0.3455,
+        "n_decisive": 53
+      },
+      "basic-box-m": {
+        "wins": 15,
+        "losses": 16,
+        "ties": 3,
+        "total": 34,
+        "win_rate_source": 47.1,
+        "win_rate_smoothed": 0.4848,
+        "n_decisive": 31
+      },
+      "beedrill-ex-cri": {
+        "wins": 12,
+        "losses": 23,
+        "ties": 4,
+        "total": 39,
+        "win_rate_source": 34.2,
+        "win_rate_smoothed": 0.3514,
+        "n_decisive": 35
+      },
+      "crustle-dri": {
+        "wins": 21,
+        "losses": 20,
+        "ties": 2,
+        "total": 43,
+        "win_rate_source": 50.4,
+        "win_rate_smoothed": 0.5116,
+        "n_decisive": 41
+      },
+      "dragapult-blaziken": {
+        "wins": 15,
+        "losses": 22,
+        "ties": 3,
+        "total": 40,
+        "win_rate_source": 40.0,
+        "win_rate_smoothed": 0.4103,
+        "n_decisive": 37
+      },
+      "dragapult-dusknoir": {
+        "wins": 34,
+        "losses": 41,
+        "ties": 3,
+        "total": 78,
+        "win_rate_source": 44.9,
+        "win_rate_smoothed": 0.4545,
+        "n_decisive": 75
+      },
+      "dragapult-ex": {
+        "wins": 38,
+        "losses": 41,
+        "ties": 2,
+        "total": 81,
+        "win_rate_source": 47.7,
+        "win_rate_smoothed": 0.4815,
+        "n_decisive": 79
+      },
+      "festival-lead": {
+        "wins": 13,
+        "losses": 18,
+        "ties": 2,
+        "total": 33,
+        "win_rate_source": 41.4,
+        "win_rate_smoothed": 0.4242,
+        "n_decisive": 31
+      },
+      "lucario-hariyama": {
+        "wins": 20,
+        "losses": 9,
+        "ties": 1,
+        "total": 30,
+        "win_rate_source": 67.8,
+        "win_rate_smoothed": 0.6774,
+        "n_decisive": 29
+      },
+      "mega-greninja-ex": {
+        "wins": 34,
+        "losses": 18,
+        "ties": 5,
+        "total": 57,
+        "win_rate_source": 62.6,
+        "win_rate_smoothed": 0.6481,
+        "n_decisive": 52
+      },
+      "n-zoroark": {
+        "wins": 58,
+        "losses": 30,
+        "ties": 3,
+        "total": 91,
+        "win_rate_source": 64.8,
+        "win_rate_smoothed": 0.6556,
+        "n_decisive": 88
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 17,
+        "losses": 17,
+        "ties": 1,
+        "total": 18,
+        "win_rate_source": 49.5,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 34
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 15,
+        "losses": 5,
+        "ties": 3,
+        "total": 23,
+        "win_rate_source": 69.6,
+        "win_rate_smoothed": 0.7273,
+        "n_decisive": 20
+      },
+      "rockets-honchkrow": {
+        "wins": 23,
+        "losses": 23,
+        "ties": 2,
+        "total": 48,
+        "win_rate_source": 49.3,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 46
+      },
+      "slowking-scr": {
+        "wins": 39,
+        "losses": 31,
+        "ties": 2,
+        "total": 72,
+        "win_rate_source": 55.1,
+        "win_rate_smoothed": 0.5556,
+        "n_decisive": 70
+      }
+    },
+    "rocket-mewtwo-ex": {
+      "alakazam-dudunsparce": {
+        "wins": 29,
+        "losses": 10,
+        "ties": 1,
+        "total": 40,
+        "win_rate_source": 73.3,
+        "win_rate_smoothed": 0.7317,
+        "n_decisive": 39
+      },
+      "basic-box-m": {
+        "wins": 3,
+        "losses": 10,
+        "ties": 3,
+        "total": 16,
+        "win_rate_source": 25.0,
+        "win_rate_smoothed": 0.2667,
+        "n_decisive": 13
+      },
+      "beedrill-ex-cri": {
+        "wins": 5,
+        "losses": 17,
+        "ties": 2,
+        "total": 24,
+        "win_rate_source": 23.6,
+        "win_rate_smoothed": 0.25,
+        "n_decisive": 22
+      },
+      "crustle-dri": {
+        "wins": 13,
+        "losses": 4,
+        "ties": 2,
+        "total": 19,
+        "win_rate_source": 71.9,
+        "win_rate_smoothed": 0.7368,
+        "n_decisive": 17
+      },
+      "dragapult-blaziken": {
+        "wins": 16,
+        "losses": 19,
+        "ties": 0,
+        "total": 35,
+        "win_rate_source": 45.7,
+        "win_rate_smoothed": 0.4595,
+        "n_decisive": 35
+      },
+      "dragapult-dusknoir": {
+        "wins": 26,
+        "losses": 32,
+        "ties": 0,
+        "total": 58,
+        "win_rate_source": 44.8,
+        "win_rate_smoothed": 0.45,
+        "n_decisive": 58
+      },
+      "dragapult-ex": {
+        "wins": 28,
+        "losses": 24,
+        "ties": 0,
+        "total": 52,
+        "win_rate_source": 53.8,
+        "win_rate_smoothed": 0.537,
+        "n_decisive": 52
+      },
+      "festival-lead": {
+        "wins": 10,
+        "losses": 6,
+        "ties": 0,
+        "total": 16,
+        "win_rate_source": 62.5,
+        "win_rate_smoothed": 0.6111,
+        "n_decisive": 16
+      },
+      "lucario-hariyama": {
+        "wins": 6,
+        "losses": 15,
+        "ties": 1,
+        "total": 22,
+        "win_rate_source": 28.8,
+        "win_rate_smoothed": 0.3043,
+        "n_decisive": 21
+      },
+      "mega-greninja-ex": {
+        "wins": 15,
+        "losses": 19,
+        "ties": 1,
+        "total": 35,
+        "win_rate_source": 43.8,
+        "win_rate_smoothed": 0.4444,
+        "n_decisive": 34
+      },
+      "n-zoroark": {
+        "wins": 35,
+        "losses": 21,
+        "ties": 3,
+        "total": 59,
+        "win_rate_source": 61.0,
+        "win_rate_smoothed": 0.6207,
+        "n_decisive": 56
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 5,
+        "losses": 15,
+        "ties": 3,
+        "total": 23,
+        "win_rate_source": 26.1,
+        "win_rate_smoothed": 0.2727,
+        "n_decisive": 20
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 8,
+        "losses": 8,
+        "ties": 0,
+        "total": 8,
+        "win_rate_source": 50.0,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 16
+      },
+      "rockets-honchkrow": {
+        "wins": 11,
+        "losses": 21,
+        "ties": 2,
+        "total": 34,
+        "win_rate_source": 34.3,
+        "win_rate_smoothed": 0.3529,
+        "n_decisive": 32
+      },
+      "slowking-scr": {
+        "wins": 19,
+        "losses": 30,
+        "ties": 1,
+        "total": 50,
+        "win_rate_source": 38.7,
+        "win_rate_smoothed": 0.3922,
+        "n_decisive": 49
+      }
+    },
+    "rockets-honchkrow": {
+      "alakazam-dudunsparce": {
+        "wins": 58,
+        "losses": 14,
+        "ties": 4,
+        "total": 76,
+        "win_rate_source": 78.1,
+        "win_rate_smoothed": 0.7973,
+        "n_decisive": 72
+      },
+      "basic-box-m": {
+        "wins": 17,
+        "losses": 10,
+        "ties": 2,
+        "total": 29,
+        "win_rate_source": 60.9,
+        "win_rate_smoothed": 0.6207,
+        "n_decisive": 27
+      },
+      "beedrill-ex-cri": {
+        "wins": 22,
+        "losses": 20,
+        "ties": 5,
+        "total": 47,
+        "win_rate_source": 50.4,
+        "win_rate_smoothed": 0.5227,
+        "n_decisive": 42
+      },
+      "crustle-dri": {
+        "wins": 28,
+        "losses": 8,
+        "ties": 2,
+        "total": 38,
+        "win_rate_source": 75.4,
+        "win_rate_smoothed": 0.7632,
+        "n_decisive": 36
+      },
+      "dragapult-blaziken": {
+        "wins": 18,
+        "losses": 19,
+        "ties": 1,
+        "total": 38,
+        "win_rate_source": 48.2,
+        "win_rate_smoothed": 0.4872,
+        "n_decisive": 37
+      },
+      "dragapult-dusknoir": {
+        "wins": 47,
+        "losses": 53,
+        "ties": 6,
+        "total": 106,
+        "win_rate_source": 46.2,
+        "win_rate_smoothed": 0.4706,
+        "n_decisive": 100
+      },
+      "dragapult-ex": {
+        "wins": 42,
+        "losses": 47,
+        "ties": 6,
+        "total": 95,
+        "win_rate_source": 46.3,
+        "win_rate_smoothed": 0.4725,
+        "n_decisive": 89
+      },
+      "festival-lead": {
+        "wins": 10,
+        "losses": 20,
+        "ties": 3,
+        "total": 33,
+        "win_rate_source": 33.3,
+        "win_rate_smoothed": 0.3438,
+        "n_decisive": 30
+      },
+      "lucario-hariyama": {
+        "wins": 11,
+        "losses": 4,
+        "ties": 1,
+        "total": 16,
+        "win_rate_source": 70.8,
+        "win_rate_smoothed": 0.7059,
+        "n_decisive": 15
+      },
+      "mega-greninja-ex": {
+        "wins": 29,
+        "losses": 35,
+        "ties": 4,
+        "total": 68,
+        "win_rate_source": 44.6,
+        "win_rate_smoothed": 0.4545,
+        "n_decisive": 64
+      },
+      "n-zoroark": {
+        "wins": 60,
+        "losses": 72,
+        "ties": 5,
+        "total": 137,
+        "win_rate_source": 45.0,
+        "win_rate_smoothed": 0.4552,
+        "n_decisive": 132
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 23,
+        "losses": 23,
+        "ties": 2,
+        "total": 48,
+        "win_rate_source": 49.3,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 46
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 21,
+        "losses": 11,
+        "ties": 2,
+        "total": 34,
+        "win_rate_source": 63.7,
+        "win_rate_smoothed": 0.6471,
+        "n_decisive": 32
+      },
+      "rockets-honchkrow": {
+        "wins": 16,
+        "losses": 16,
+        "ties": 3,
+        "total": 19,
+        "win_rate_source": 48.6,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 32
+      },
+      "slowking-scr": {
+        "wins": 40,
+        "losses": 47,
+        "ties": 2,
+        "total": 89,
+        "win_rate_source": 45.7,
+        "win_rate_smoothed": 0.4607,
+        "n_decisive": 87
+      }
+    },
+    "slowking-scr": {
+      "alakazam-dudunsparce": {
+        "wins": 38,
+        "losses": 95,
+        "ties": 4,
+        "total": 137,
+        "win_rate_source": 28.7,
+        "win_rate_smoothed": 0.2889,
+        "n_decisive": 133
+      },
+      "basic-box-m": {
+        "wins": 25,
+        "losses": 27,
+        "ties": 2,
+        "total": 54,
+        "win_rate_source": 47.5,
+        "win_rate_smoothed": 0.4815,
+        "n_decisive": 52
+      },
+      "beedrill-ex-cri": {
+        "wins": 58,
+        "losses": 34,
+        "ties": 5,
+        "total": 97,
+        "win_rate_source": 61.5,
+        "win_rate_smoothed": 0.6277,
+        "n_decisive": 92
+      },
+      "crustle-dri": {
+        "wins": 41,
+        "losses": 28,
+        "ties": 1,
+        "total": 70,
+        "win_rate_source": 59.0,
+        "win_rate_smoothed": 0.5915,
+        "n_decisive": 69
+      },
+      "dragapult-blaziken": {
+        "wins": 44,
+        "losses": 38,
+        "ties": 4,
+        "total": 86,
+        "win_rate_source": 52.7,
+        "win_rate_smoothed": 0.5357,
+        "n_decisive": 82
+      },
+      "dragapult-dusknoir": {
+        "wins": 109,
+        "losses": 79,
+        "ties": 4,
+        "total": 192,
+        "win_rate_source": 57.5,
+        "win_rate_smoothed": 0.5789,
+        "n_decisive": 188
+      },
+      "dragapult-ex": {
+        "wins": 97,
+        "losses": 88,
+        "ties": 6,
+        "total": 191,
+        "win_rate_source": 51.8,
+        "win_rate_smoothed": 0.5241,
+        "n_decisive": 185
+      },
+      "festival-lead": {
+        "wins": 20,
+        "losses": 25,
+        "ties": 0,
+        "total": 45,
+        "win_rate_source": 44.4,
+        "win_rate_smoothed": 0.4468,
+        "n_decisive": 45
+      },
+      "lucario-hariyama": {
+        "wins": 45,
+        "losses": 23,
+        "ties": 2,
+        "total": 70,
+        "win_rate_source": 65.2,
+        "win_rate_smoothed": 0.6571,
+        "n_decisive": 68
+      },
+      "mega-greninja-ex": {
+        "wins": 62,
+        "losses": 54,
+        "ties": 8,
+        "total": 124,
+        "win_rate_source": 52.2,
+        "win_rate_smoothed": 0.5339,
+        "n_decisive": 116
+      },
+      "n-zoroark": {
+        "wins": 95,
+        "losses": 87,
+        "ties": 3,
+        "total": 185,
+        "win_rate_source": 51.9,
+        "win_rate_smoothed": 0.5217,
+        "n_decisive": 182
+      },
+      "ogerpon-meganium-hydrapple": {
+        "wins": 31,
+        "losses": 39,
+        "ties": 2,
+        "total": 72,
+        "win_rate_source": 44.0,
+        "win_rate_smoothed": 0.4444,
+        "n_decisive": 70
+      },
+      "rocket-mewtwo-ex": {
+        "wins": 30,
+        "losses": 19,
+        "ties": 1,
+        "total": 50,
+        "win_rate_source": 60.7,
+        "win_rate_smoothed": 0.6078,
+        "n_decisive": 49
+      },
+      "rockets-honchkrow": {
+        "wins": 47,
+        "losses": 40,
+        "ties": 2,
+        "total": 89,
+        "win_rate_source": 53.6,
+        "win_rate_smoothed": 0.5393,
+        "n_decisive": 87
+      },
+      "slowking-scr": {
+        "wins": 75,
+        "losses": 75,
+        "ties": 0,
+        "total": 75,
+        "win_rate_source": 50.0,
+        "win_rate_smoothed": 0.5,
+        "n_decisive": 150
+      }
+    }
+  }
+}

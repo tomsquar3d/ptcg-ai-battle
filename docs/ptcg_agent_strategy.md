@@ -122,6 +122,19 @@ Figures for free: prize-path accuracy vs. actual game endings; deck-quality curv
 
 ---
 
+### Predictive disruption → a fourth strategy object (added post-meta-analysis)
+
+Not the deprioritized stall archetype — a tempo weapon: use the opponent model's forecast to *time* disruption cards (Items, Supporters, Stadiums, ACE SPECs, Tools). Meta data confirms pool support: Special Red Card, Unfair Stamp, Crushing/Enhanced Hammer, Jamming Tower, Team Rocket's Watchtower all run at high rates in top human lists.
+
+**Disruption Planner (runtime object):** per disruption card in hand each turn,
+`EDV = Σ_plays P(play next turn | opponent model) × Δ(their turns-to-6 if disrupted) − our tempo cost`.
+Play at local EDV maxima: Red Card when their estimated hand is large; Hammer when their attacker is one energy from attacking; Unfair Stamp on a KO into a built-up hand; Jamming Tower vs tool-reliant archetypes. Consumes existing belief-engine outputs (threat forecast, hand estimate, energy curves) + prize-race deltas.
+
+**Disruption Coverage Score (deck metric — upgrades the 'disruption' axis):**
+per-archetype *vulnerability profiles* from priors (basic-energy fragility, ability reliance, tool reliance, draw-engine dependence), then
+`DCS = Σ_archetypes meta_share × effectiveness(our best answer, their profile)`.
+Static version from skeleton CSVs + card DB (available pre-round-robin); functional version = measured delta in opponents' first-attack turn and turns-to-6 with disruption package in vs out. Both feed Deck Lab scoring; the ablation doubles as a writeup figure and directly tests the 'disruption is stronger vs AI opponents' hypothesis.
+
 ## 5. Deck construction (offline pipeline — no separate model)
 
 Deck building is offline optimization with expensive evaluation (simulated games), not a runtime decision problem. No learned model; an optimization loop.
