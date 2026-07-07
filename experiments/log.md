@@ -936,3 +936,22 @@ v3-pilot ranking still: 1. sample 81% ... every meta candidate 32-59%.
   planning in the pilot, evaluator quality, and diagnosing why v1 sits below μ₀=600.
 - To separate cause (a) vs (b): pit a **hand-tuned real Limitless list** (pool-filtered) vs sample
   under v3 — if it beats sample, my builds were the problem; if not, it's multi-turn planning / meta.
+
+## #24 — ML foundations: state featurization (`src/nn/features.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/nn/features.py`, `scripts/features_smoke.py`
+
+First ML-path brick (§3 Layer 3 — the belief-engine → network interface, now that #21 validated v4
+as a strong self-play teacher). `encode_state(gs, ci, ai) → StateFeatures`: fixed-shape numpy
+arrays — per-Pokémon card-id slots [12] + scalars [12×10] + mask, hand ids [12], stadium id, and a
+global vector [36] that folds in the strategy objects (prize race via `prize.py`, offense/threat via
+`threat.attack_potential`) as *inputs*, not reward shaping. Pure Python + numpy (no torch), never
+raises (perception-style); vocab 1269 (ids 1..1267 + PAD 0 + UNKNOWN 1268 for a face-down opp
+Pokémon). Validated: `features_smoke.py` — 1691 states over 8 games, 0 errors, fixed schema, finite
+values, ids in vocab, mask/id consistent.
+
+### Next
+- Action featurization (per-legal-option features for the pointer policy head) — the other hard
+  prerequisite, also pure Python. Then the torch encoder+heads (embedding + zone attention → state
+  vector → policy/value), needing a torch install (training-only; ONNX-CPU for deploy).
