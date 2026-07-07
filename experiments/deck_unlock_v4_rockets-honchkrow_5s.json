@@ -1,0 +1,13 @@
+{
+  "critical_s": 5.0,
+  "n": 60,
+  "decks": {
+    "rockets-honchkrow": {
+      "v4": 0.467,
+      "v1": 0.325,
+      "v3": 0.267,
+      "meta": 28,
+      "sample": 32
+    }
+  }
+}

@@ -11,7 +11,8 @@ Each side pilots a DIFFERENT deck, and v4 keeps a per-game opponent tracker, so 
 independent v4 instances (one per side) — their trackers must not collide. Reduced MCTS budget for
 tractability (still far stronger than the heuristics); parallel across processes.
 
-Run:  .venv/bin/python scripts/deck_unlock_v4.py [N_per_deck] [critical_seconds]
+Run:  .venv/bin/python scripts/deck_unlock_v4.py [N_per_deck] [critical_seconds] [deck_name_filter]
+      deck_name_filter (optional): only run candidate decks whose name contains this substring.
 """
 import importlib.util
 import json
@@ -100,8 +101,12 @@ def play_spec(spec):
 
 def main() -> int:
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 20
+    filt = sys.argv[3] if len(sys.argv) > 3 else None
     decks = {os.path.splitext(f)[0]: tuple(int(x) for x in open(os.path.join(CAND_DIR, f)).read().split() if x.strip())
-             for f in sorted(os.listdir(CAND_DIR)) if f.endswith(".csv")}
+             for f in sorted(os.listdir(CAND_DIR)) if f.endswith(".csv")
+             and (filt is None or filt in f)}
+    if not decks:
+        raise SystemExit(f"no candidate decks match filter {filt!r}")
     specs = [(name, t, g % 2) for name, t in decks.items() for g in range(n)]
     random.shuffle(specs)
 
@@ -143,10 +148,11 @@ def main() -> int:
         lines.append(f"| {name} | {f1} | {f3} | **{wr:.0%}** | {c['meta']}/{c['sample']}/{c['draw']} |")
         print(f"  {name:24} v1 {f1:>4}  v3 {f3:>4}  ->  v4 {wr:.0%}  (W/L/D {c['meta']}/{c['sample']}/{c['draw']})")
 
-    out = os.path.join(REPO, "experiments", "deck_unlock_v4.md")
+    suffix = f"_{filt}_{int(CRIT_S)}s" if filt else ""
+    out = os.path.join(REPO, "experiments", f"deck_unlock_v4{suffix}.md")
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    with open(os.path.join(REPO, "experiments", "deck_unlock_v4.json"), "w") as f:
+    with open(os.path.join(REPO, "experiments", f"deck_unlock_v4{suffix}.json"), "w") as f:
         json.dump({"critical_s": CRIT_S, "n": n, "decks": result}, f, indent=2)
     print(f"\nwrote {out}")
     return 0

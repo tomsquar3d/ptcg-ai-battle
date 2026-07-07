@@ -871,6 +871,34 @@ sample still beats 7 of 8 meta decks.
 - Otherwise the standing plan holds: v4 is the best pilot, sample the safest deck; begin training
   foundations (encoder → action featurization → net) with v4 as the self-play teacher.
 
+## #23 — rockets-honchkrow confirmation: regression to the mean, sample stays the ship
+
+**Date:** 2026-07-07
+**Code:** `scripts/deck_unlock_v4.py` (added deck-name filter); `deck_unlock_v4_rockets-honchkrow_5s.*`
+
+### Result
+```
+rockets-honchkrow vs sample, v4 pilot, N=60, FULL 5 s budget: 47% (28/32)
+  (was 65% at N=20 / 1.5 s — that spike was noise; regressed to ~even.)
+```
+
+### Conclusion
+- **rockets-honchkrow does NOT beat sample** (47%, essentially even, slightly under) — no shippable
+  deck upgrade. **Sample remains the deck we ship.**
+- Still a real signal: 47% vs the ~30% under v1/v3 confirms **v4/MCTS pilots this deck far better
+  than the heuristics** — it lifts it to near-parity with sample, just not past it.
+- **Closes the deck-construction arc: no auto-generated meta deck beats sample, even under a strong
+  pilot.** The lever is not the deck — it's the pilot. And on the *simple* sample deck we ship, v4's
+  edge over v1 is only marginal (52%, #21). So the near-term ladder is roughly capped by the
+  heuristic-pilot-on-simple-deck ceiling.
+- **Implication: the real remaining lever is a fundamentally stronger pilot — the ML path** (self-
+  play RL with v4 as teacher). Deck construction and search-heuristic tuning are both largely tapped.
+
+### Next
+- Begin training foundations (§3 roadmap): state encoder → action featurization → policy/value net →
+  self-play recorder (MCTS visits = π, outcome = z) → train → wire net as MCTS prior/value → ONNX-CPU.
+- (optional) hand-tuned real Limitless list vs sample under v4 — last cheap check on "crude builds".
+
 ## #17 — v3-pilot round-robin: the #15 pilot-confound was WRONG (`candidate_round_robin_v3.*`)
 
 **Date:** 2026-07-07
