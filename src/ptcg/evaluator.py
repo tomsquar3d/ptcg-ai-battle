@@ -18,13 +18,16 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
 from .threat import attack_potential
+from .prize import prize_race as compute_prize_race
 
 WIN_SCORE = 1_000_000.0
 
 
 @dataclass
 class EvalWeights:
-    prize_diff: float = 1000.0       # per prize of lead (master signal)
+    prize_diff: float = 1000.0       # per prize of lead (current standings)
+    prize_race: float = 0.0          # per turn of prize-race lead, their_turns_to_6 − our_turns_to_6
+                                     # (§4 master signal; OFF by default — v4 enables it)
     ko_them_now: float = 300.0       # × prizes we'd take by KO'ing their active this turn
     ko_us_now: float = 300.0         # × prizes we'd give up if our active is KO'd
     offense_next: float = 90.0       # we can KO their active with one more energy
@@ -108,6 +111,13 @@ def evaluate(
         if my_active is not None:
             terms["energy_active"] = w.energy_active * min(
                 len(getattr(my_active, "energy_types", None) or []), w.energy_active_cap)
+
+        # Prize-race differential (§4 master signal): projected turns-to-6 for each side, using the
+        # set-up damage outputs as the per-turn KO rate. Rewards board development / chip damage
+        # that shortens our race — the multi-turn foresight a single-turn search otherwise lacks.
+        if w.prize_race:
+            our_turns, their_turns = compute_prize_race(game_state, our_next, thr_next)
+            terms["prize_race"] = w.prize_race * (their_turns - our_turns)
 
     # 3) Board health / presence.
     terms["active_hp"] = w.active_hp * (_hp_frac(my_active) - _hp_frac(opp_active))

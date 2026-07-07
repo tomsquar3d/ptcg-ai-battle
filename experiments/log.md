@@ -694,6 +694,49 @@ v3 vs v1, DRAGAPULT-EX (complex): 28/12 -> 70% (N=40, ~2.5σ); move mean 72 ms, 
 - Then re-test opponent-response (#10) on top of the stronger search (its premise was "fix search
   first").
 
+## #18 — Prize-mapping leaf (turns-to-6): NEGATIVE — the signal isn't predictive (`src/ptcg/prize.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/ptcg/prize.py`, `evaluator.py` (prize_race term, default 0), `scripts/{prize_smoke,pilot_ab}.py`
+
+### Hypothesis
+#17 said the meta decks lose because they need multi-turn planning v3 lacks. Give the single-turn
+beam multi-turn foresight via a smarter *leaf*: the §4 prize-race differential (their_turns_to_6 −
+our_turns_to_6) as an evaluator term, so setups/chip damage that shorten our race score highly.
+
+### Method
+`prize.py` = greedy turns-to-6 (KO opponent Pokémon worth our remaining prizes, ceil(hp/output)
+turns each, cheapest-per-prize first). Wired into the evaluator as an ablatable term (default 0).
+v4 = v3 beam + prize_race=200. Validated the arithmetic (`prize_smoke.py`). Added `pilot_ab.py`
+(reusable pilot A/B).
+
+### Result — the term does not predict winning
+```
+v4 vs v3, dragapult-ex, N=40 : 19/21 -> 48%  (a wash)
+Pearson(eval, win) on 16k dragapult random-play decisions:
+   default eval          +0.211
+   eval + prize_race      +0.057   (adding the term DEGRADES prediction)
+   prize_race term alone  +0.027   (essentially noise; fires on 75% of decisions)
+```
+
+### Conclusion
+- The turns-to-6 term, as implemented, is **noise** — it dilutes the good eval (0.211→0.057). v4
+  ties v3 only because the noise perturbs the beam ~randomly; a higher weight would be *worse*.
+- The *concept* (prize race = master signal, §4) isn't refuted — my **model** is too crude: uniform
+  damage across targets (ignores per-target weakness), no first-mover tempo, fragile fresh-basic
+  tail, and 0 output early → no early signal. It doesn't track reality under messy boards.
+- **Not shipped.** v4 removed; prize framework kept in `src` but OFF by default (ablatable).
+
+### Methodology lesson (applies going forward)
+The cheap **Pearson(eval, win)** test (seconds) diagnosed this far faster than the 12-min head-to-head
+— **gate expensive pilot A/Bs behind the predictive test.** Any eval enrichment must beat +0.211 on
+that test before we spend head-to-head compute. Pattern across #10/#16/#18: the base eval already
+captures a lot; enrichments rarely help unless they add genuinely new predictive signal.
+
+### Next (to rescue prize mapping, if pursued)
+Iterate the model against the Pearson test: per-target `attack_potential` (real weakness/HP), a
+first-mover/tempo term, and only trust turns-to-6 once an attacker is online. Cheap to iterate now.
+
 ## #17 — v3-pilot round-robin: the #15 pilot-confound was WRONG (`candidate_round_robin_v3.*`)
 
 **Date:** 2026-07-07
