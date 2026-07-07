@@ -29,6 +29,10 @@ class EvalWeights:
     ko_us_now: float = 300.0         # × prizes we'd give up if our active is KO'd
     offense_next: float = 90.0       # we can KO their active with one more energy
     threat_next: float = 110.0       # they can KO ours with one more energy (and not already)
+    our_output: float = 1.5          # per point of our best affordable attack (setup gradient)
+    their_output: float = 1.0        # per point of their best affordable attack (penalty)
+    energy_active: float = 12.0      # per energy attached to our active (capped)
+    energy_active_cap: int = 4
     active_hp: float = 60.0          # our active HP fraction advantage
     board: float = 40.0              # (our Pokémon in play) − (theirs)
     hand: float = 8.0                # hand-size advantage
@@ -94,6 +98,16 @@ def evaluate(
             terms["ko_us_now"] = -w.ko_us_now * getattr(my_active, "prize_value", 1)
         elif my_active is not None and thr_next >= my_active.hp > 0:
             terms["threat_next"] = -w.threat_next
+
+        # Continuous offense/defense output — gives 1-ply lookahead a gradient toward
+        # attaching energy and building an attacker (otherwise setup moves all look equal).
+        if our_now:
+            terms["our_output"] = w.our_output * our_now
+        if thr_now:
+            terms["their_output"] = -w.their_output * thr_now
+        if my_active is not None:
+            terms["energy_active"] = w.energy_active * min(
+                len(getattr(my_active, "energy_types", None) or []), w.energy_active_cap)
 
     # 3) Board health / presence.
     terms["active_hp"] = w.active_hp * (_hp_frac(my_active) - _hp_frac(opp_active))

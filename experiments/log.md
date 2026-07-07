@@ -338,3 +338,44 @@ once paired with a non-random policy.
   arbitration layer (routine → argmax; critical turn → deeper search; clock → instant fallback) +
   the mandatory try/except watchdog. Then submit to record the first non-random ladder μ.
 - Per-term ablation ladder (turn each weight off, measure win-rate delta) — the writeup's spine.
+
+---
+
+## #8 — v1 agent: evaluator-guided 1-ply search (`submissions/v1/`)
+
+**Date:** 2026-07-06
+**Code:** `submissions/v1/{main.py, agent.py, ptcg/}`, `scripts/v1_eval.py`, `build_submission.py`
+
+### Design
+First real agent. Per decision: determinize the hidden state once (`search_begin`), branch one
+`search_step` per legal option (branching from a shared root confirmed — fair comparison), score
+each resulting state with the heuristic evaluator, pick the argmax. Perspective handled — a
+resulting state on the opponent's turn is scored from their view and negated. Multi-select →
+greedy top-`maxCount`. `main.py` wraps it in a watchdog: any exception / clock pressure
+(`remainingOverageTime < 15s`) → legal random move. Determinization fills the opponent's hidden
+zones with our own decklist (valid filler; our-turn outcomes don't depend on their hidden cards).
+
+### Bug found & fixed — the evaluator needed a setup gradient
+First cut **lost to random 7%** (2/28): it never attacked through turn 12. Cause: the evaluator
+scored only outcomes (prizes/HP/board/KO), so every setup action (attach energy, develop) scored
+identically → 1-ply lookahead had no gradient toward building an attacker, and ties resolved to
+END. Fix: added continuous **`our_output`/`their_output`** (per point of best *affordable* attack)
+and **`energy_active`** terms, so attaching energy that enables a bigger attack raises the score.
+
+### Result (`scripts/v1_eval.py 40 12`)
+```
+1. QUALITY (raw SDK, v1 vs random): W/L/D 27/13/0 -> 68% win; move mean 1.1 ms, max 27 ms;
+                                     0 brain exceptions
+2. INTEGRATION (cabt env, v1 submission vs random): all DONE/DONE (no crash/timeout),
+                                     8/12 wins, 0.18 s/game
+```
+v1 clearly beats the random baseline (experiment #1) and runs cleanly in the real environment,
+comfortably inside the clock. This is the week-2 shippable agent / ablation baseline.
+
+### Notes / next
+- `submissions/v1/ptcg` is a vendored snapshot of `src/ptcg` (source of truth); re-sync with
+  `scripts/build_submission.py v1`. Native SDK libs stay git-ignored (copy from the SDK to run).
+- Deck is v0's sample deck for now — deck construction (§5) is a separate pipeline.
+- Next: submit v1 to record the first non-random ladder μ; then the §3 arbitration upgrade
+  (critical-turn deeper search) and the per-term ablation ladder (writeup spine). 1-ply greedy is
+  myopic across a full turn — deeper/turn-aware search is the main quality lever from here.
