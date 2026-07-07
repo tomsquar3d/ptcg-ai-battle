@@ -109,6 +109,25 @@ def _best_damage(attacker_cd: Any, available: Sequence[int], def_weak, def_res,
     return best, best_name
 
 
+def attack_potential(attacker: Any, defender: Any, card_index: Mapping[int, Any],
+                     attack_index: Mapping[int, Any]) -> tuple[int, int, Optional[str]]:
+    """Direction-agnostic: (damage_now, damage_with_one_more_energy, best_attack_name) that
+    `attacker` (a PokemonView) can deal to `defender` (a PokemonView). Used both for the
+    opponent's threat to us and for our own offense in the evaluator."""
+    if attacker is None or defender is None:
+        return 0, 0, None
+    attacker_cd = card_index.get(attacker.card_id)
+    if attacker_cd is None:
+        return 0, 0, None
+    defender_cd = card_index.get(defender.card_id)
+    def_weak = getattr(defender_cd, "weakness", None)
+    def_res = getattr(defender_cd, "resistance", None)
+    available = list(getattr(attacker, "energy_types", None) or [])
+    now, name = _best_damage(attacker_cd, available, def_weak, def_res, attack_index, 0)
+    pot, _ = _best_damage(attacker_cd, available, def_weak, def_res, attack_index, 1)
+    return now, max(pot, now), name
+
+
 def assess_threat(
     game_state: Any,
     card_index: Mapping[int, Any],
@@ -128,19 +147,8 @@ def assess_threat(
     opp_active = getattr(game_state.opponent, "active", None)
     our_hp = getattr(me_active, "hp", 0) if me_active else 0
 
-    now = potential = 0
-    attacker_id = best_name = None
-    if me_active is not None and opp_active is not None:
-        our_cd = card_index.get(me_active.card_id)
-        def_weak = getattr(our_cd, "weakness", None)
-        def_res = getattr(our_cd, "resistance", None)
-        attacker_cd = card_index.get(opp_active.card_id)
-        if attacker_cd is not None:
-            attacker_id = opp_active.card_id
-            available = list(getattr(opp_active, "energy_types", None) or [])
-            now, best_name = _best_damage(attacker_cd, available, def_weak, def_res, attack_index, 0)
-            potential, _ = _best_damage(attacker_cd, available, def_weak, def_res, attack_index, 1)
-            potential = max(potential, now)
+    now, potential, best_name = attack_potential(opp_active, me_active, card_index, attack_index)
+    attacker_id = opp_active.card_id if opp_active is not None else None
 
     ta = ThreatAssessment(
         our_active_hp=our_hp,

@@ -297,3 +297,44 @@ base-damage + weakness model (a §7.3 accuracy figure for the writeup).
 - Heuristic evaluator (`src/`): weighted terms over prize-race (belief) + deck-quality (draw
   model) + threat penalties → the week-2 shippable agent, ablation baseline, and clock fallback.
 - Effect-text tagging pass to lift damage accuracy above 98% and enable bench/switch threats.
+
+---
+
+## #7 — Heuristic evaluator: the leaf/position score (`src/ptcg/evaluator.py`)
+
+**Date:** 2026-07-06
+**Code:** `src/ptcg/evaluator.py`, `scripts/evaluator_smoke.py`; refactor `threat.attack_potential`
+
+### Goal
+A single interpretable position score (§3 Layer-5 leaf eval; §4 "weighted terms"): the week-2
+shippable agent's brain, the ablation baseline, the search leaf evaluation, and the clock
+fallback. Every term is named + weighted so it can be ablated on/off.
+
+### Terms (from the to-move player's view; `EvalWeights` are tunable)
+- **prize_diff** (master, ×1000/prize) — prizes we're ahead by.
+- **ko_them_now / ko_us_now** (× prize value of the KO'd Pokémon — ex/mega worth more) and
+  **offense_next / threat_next** (KO possible with one more energy) — via `threat.attack_potential`
+  (extracted so the evaluator scores our offense, not just their threat).
+- **active_hp** (HP-fraction edge), **board** (Pokémon in play diff), **hand** (tempo),
+  **special_us / special_opp**, **deckout** (risk as our deck runs low). Terminal states → ±WIN.
+
+### Validation (`scripts/evaluator_smoke.py 80`)
+```
+1. UNITS  : terminal scores, prize-race sign, term breakdown
+2. PREDICT: 3779 decisions / 80 games — does a higher eval predict WINNING under random play?
+          Pearson(eval, win) = +0.193
+          win rate: eval>0 64%  vs  eval<0 41%
+          win rate by eval quartile (low→high): 36%  49%  54%  73%
+```
+Under fully random self-play (huge variance, both sides random), positions the evaluator scores
+in the top quartile win **73%** vs **36%** bottom — the score measures genuine advantage. This is
+the §4 "prize-path accuracy vs actual game endings" figure; predictiveness is currently
+prize-dominated (expected under random continuation), and the threat/board terms should add signal
+once paired with a non-random policy.
+
+### Next
+- Wire the first real agent (`submissions/v1/`): 1-ply lookahead via the Search API (experiment
+  #3: ~8k steps/s) scoring each legal option's resulting state with `evaluate()`, + the §3
+  arbitration layer (routine → argmax; critical turn → deeper search; clock → instant fallback) +
+  the mandatory try/except watchdog. Then submit to record the first non-random ladder μ.
+- Per-term ablation ladder (turn each weight off, measure win-rate delta) — the writeup's spine.
