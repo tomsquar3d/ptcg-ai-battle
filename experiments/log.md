@@ -379,3 +379,39 @@ comfortably inside the clock. This is the week-2 shippable agent / ablation base
 - Next: submit v1 to record the first non-random ladder μ; then the §3 arbitration upgrade
   (critical-turn deeper search) and the per-term ablation ladder (writeup spine). 1-ply greedy is
   myopic across a full turn — deeper/turn-aware search is the main quality lever from here.
+
+---
+
+## #9 — v1 turn-aware search (end-of-turn rollouts)
+
+**Date:** 2026-07-06
+**Code:** `submissions/v1/agent.py`
+
+### Motivation
+1-ply greedy (#8) evaluates *partial* mid-turn states and compares across the turn boundary
+(our-turn vs opponent-turn states aren't comparable under a tempo-blind evaluator). Fix: only
+evaluate at *end-of-our-turn* states — complete turns, consistent perspective.
+
+### Method
+Turn-aware search per decision: `search_begin` once; rank the root options by immediate score;
+for the top `ROOT_BEAM=6`, greedily roll the rest of our turn to its end (each rollout step =
+the option maximizing the resulting state's score) and score that end-of-turn state; pick the
+root option with the best end-of-turn value. Anytime + bounded (`DEPTH_CAP=24`, `NODE_BUDGET=
+7000` search_steps, `MOVE_BUDGET_S=2`), with the same watchdog fallback. Multi-select roots keep
+the greedy top-k path.
+
+### Result (`scripts/v1_eval.py 40 12` + head-to-head)
+```
+vs random (raw SDK): W/L/D 34/6/0 -> 85% (up from 68% at 1-ply); move mean 8.4 ms, max 70 ms
+cabt env vs random : all DONE/DONE, 11/12 wins, 0.17 s/game
+head-to-head vs the 1-ply agent (#8), 40 games, seats alternated: turn-aware 30/10 -> 75%
+```
+Turn-aware beats 1-ply decisively (75% h2h) and lifts win-rate vs random 68%→85%, still trivially
+inside the clock (max 70 ms/move vs the 600 s bank).
+
+### Next quality levers
+- Opponent-response lookahead at the leaf (1-ply for them, belief-determinized) — currently the
+  static evaluator's threat terms stand in for "did we leave ourselves open".
+- Proper best-first/MCTS with backtracking (rollout is greedy, so it finds *a* good turn, not the
+  optimal); gated on the node budget (experiment #3: ~8k steps/s).
+- Per-term ablation ladder; submit to record the first non-random ladder μ.

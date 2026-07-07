@@ -32,8 +32,11 @@ _CARD_INDEX = None
 _ATTACK_INDEX = None
 _DECK = None
 
-MOVE_BUDGET_S = 2.0      # soft wall-clock cap per decision (1-ply is ~ms; this is slack)
+MOVE_BUDGET_S = 2.0      # soft wall-clock cap per decision
 LOW_CLOCK_S = 15.0       # below this remaining bank, skip search and move instantly
+ROOT_BEAM = 6            # how many root options to fully roll out to end-of-turn
+DEPTH_CAP = 24           # max our-turn actions explored in a rollout
+NODE_BUDGET = 7000       # max search_step calls per decision (anytime cap; ~<1s)
 
 
 def _lazy_init():
@@ -90,8 +93,64 @@ def _score_state(search_state, my_index):
     return s if getattr(cur, "yourIndex", my_index) == my_index else -s
 
 
+def _is_our_turn(state, my_index):
+    obs = getattr(state, "observation", None)
+    cur = getattr(obs, "current", None)
+    return (cur is not None and getattr(cur, "result", -1) == -1
+            and getattr(obs, "select", None) is not None
+            and getattr(cur, "yourIndex", None) == my_index)
+
+
+def _greedy_rollout(state, my_index, ctx):
+    """From an our-turn state, greedily play the rest of our turn (each step = the option that
+    maximizes the resulting state's score), until the turn ends / game ends / budget hit.
+    Returns the reached end-of-turn (or cut) state; the caller scores it as the line's value."""
+    depth = 0
+    while _is_our_turn(state, my_index) and depth < DEPTH_CAP:
+        if ctx["n"] >= NODE_BUDGET or time.monotonic() > ctx["deadline"]:
+            break
+        sel = state.observation.select
+        nopt = len(sel.option)
+        if nopt == 0:
+            break
+        if sel.maxCount == 1 and sel.minCount <= 1:
+            best = None
+            for j in range(nopt):
+                if ctx["n"] >= NODE_BUDGET or time.monotonic() > ctx["deadline"]:
+                    break
+                try:
+                    cj = search_step(state.searchId, [j])
+                    ctx["n"] += 1
+                except Exception:
+                    continue
+                s = _score_state(cj, my_index)
+                if best is None or s > best[0]:
+                    best = (s, cj)
+            if sel.minCount == 0:  # option of taking no more actions
+                try:
+                    c0 = search_step(state.searchId, [])
+                    ctx["n"] += 1
+                    if best is None or _score_state(c0, my_index) >= best[0]:
+                        best = (0, c0)
+                except Exception:
+                    pass
+            if best is None:
+                break
+            state = best[1]
+        else:  # multi-select mid-turn: take a valid default set and continue
+            k = max(sel.minCount, min(sel.maxCount, nopt))
+            try:
+                state = search_step(state.searchId, list(range(k)))
+                ctx["n"] += 1
+            except Exception:
+                break
+        depth += 1
+    return state
+
+
 def choose(obs_dict, time_left=None):
-    """Return the list of option indices for this decision."""
+    """Turn-aware search: for the top root options, roll our turn to its end and pick the option
+    whose best end-of-turn state scores highest. Falls back to a legal move on any trouble."""
     obs = to_observation_class(obs_dict)
     sel = obs.select
     if sel is None:
@@ -101,46 +160,60 @@ def choose(obs_dict, time_left=None):
         return []
     my_index = obs.current.yourIndex if obs.current else 0
 
-    # Clock pressure → instant legal move (never risk the bank).
     if time_left is not None and time_left < LOW_CLOCK_S:
         return _legal_random(sel)
 
     try:
         _lazy_init()
         root = search_begin(obs, *_determinize(obs, _DECK))
-        sid = root.searchId
-        deadline = time.monotonic() + MOVE_BUDGET_S
+        ctx = {"deadline": time.monotonic() + MOVE_BUDGET_S, "n": 0}
         try:
-            scored = []
+            # Rank root options by immediate score, keep their child states.
+            imm = []
             for i in range(n):
-                if time.monotonic() > deadline:
+                if ctx["n"] >= NODE_BUDGET or time.monotonic() > ctx["deadline"]:
                     break
                 try:
-                    st = search_step(sid, [i])
-                    scored.append((_score_state(st, my_index), i))
+                    ci = search_step(root.searchId, [i])
+                    ctx["n"] += 1
+                    imm.append((_score_state(ci, my_index), i, ci))
                 except Exception:
                     continue
-
-            if sel.maxCount <= 1:
-                # optionally selecting nothing (minCount 0)
-                if sel.minCount == 0:
-                    try:
-                        s0 = _score_state(search_step(sid, []), my_index)
-                        if not scored or s0 >= max(scored)[0]:
-                            return []
-                    except Exception:
-                        pass
-                if scored:
-                    return [max(scored)[1]]
+            if not imm:
                 return _legal_random(sel)
 
-            # multi-select: greedy top-maxCount by single-option score (valid when minCount<=1)
-            if scored and sel.minCount <= 1:
-                scored.sort(reverse=True)
-                pick = sorted({i for _, i in scored[:sel.maxCount]})
-                if len(pick) >= sel.minCount:
-                    return pick[:sel.maxCount]
-            return _legal_random(sel)
+            # Multi-select root: greedy top-maxCount by immediate score (no turn rollout).
+            if sel.maxCount > 1:
+                if sel.minCount <= 1:
+                    imm.sort(key=lambda t: t[0], reverse=True)
+                    pick = sorted({i for _, i, _ in imm[:sel.maxCount]})
+                    if len(pick) >= sel.minCount:
+                        return pick[:sel.maxCount]
+                return _legal_random(sel)
+
+            # Single-select: fully roll out the top-BEAM options to end-of-turn.
+            imm.sort(key=lambda t: t[0], reverse=True)
+            best_i, best_v = None, float("-inf")
+            for _s, i, ci in imm[:ROOT_BEAM]:
+                if best_i is not None and time.monotonic() > ctx["deadline"]:
+                    break
+                end = ci if not _is_our_turn(ci, my_index) else _greedy_rollout(ci, my_index, ctx)
+                v = _score_state(end, my_index)
+                if v > best_v:
+                    best_v, best_i = v, i
+
+            # Selecting nothing (minCount 0): compare its turn value too.
+            if sel.minCount == 0:
+                try:
+                    c0 = search_step(root.searchId, [])
+                    ctx["n"] += 1
+                    end0 = c0 if not _is_our_turn(c0, my_index) else _greedy_rollout(c0, my_index, ctx)
+                    if _score_state(end0, my_index) > best_v:
+                        return []
+                except Exception:
+                    pass
+
+            return [best_i] if best_i is not None else _legal_random(sel)
         finally:
             search_end()
     except Exception:
