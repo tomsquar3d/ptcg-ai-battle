@@ -33,6 +33,9 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 TH_DIR = os.path.join(REPO, "data", "external", "trainerhill")
 OUT_DIR = HERE
 REPORT = os.path.join(REPO, "experiments", "meta_priors_report.md")
+# Runtime-ready templates for the opponent model, emitted INTO the agent package so they ship
+# with the submission (build_submission vendors src/ptcg). Consumed by src/ptcg/archetypes.py.
+PTCG_TEMPLATES = os.path.join(REPO, "src", "ptcg", "archetype_templates.json")
 
 BETA_ALPHA = 1.0   # Beta(1,1) Laplace prior on the (win | decisive game) rate
 CONSTRUCTIBILITY_FLAG = 0.85
@@ -209,6 +212,32 @@ def build_vulnerability_profiles(archetypes) -> dict:
     return out
 
 
+# -------------------------------------------------------------- runtime opponent-model templates
+
+def build_runtime_templates(priors) -> dict:
+    """Compact archetype templates for src/ptcg/opponent.py's classifier + zone model, derived
+    from the priors: template count = round(expected_copies) (zeros dropped → the *typical* list;
+    flex cards played <½ the time fall out), prior = meta_share. Kept small and native-free so it
+    bundles with the agent."""
+    out = {"_meta": {
+        "description": "Runtime archetype templates for the opponent model (src/ptcg/archetypes.py). "
+                       "template[card_id] = round(expected_copies) from archetype_priors.json; "
+                       "prior = meta_share. Regenerate via scripts/build_priors.py.",
+    }, "archetypes": {}}
+    for arch, entry in priors["archetypes"].items():
+        template = {}
+        for cid, c in entry["cards"].items():
+            cnt = round(c["expected_copies"])
+            if cnt > 0:
+                template[cid] = cnt
+        out["archetypes"][arch] = {
+            "prior": entry["meta_share"],
+            "template_size": sum(template.values()),
+            "template": template,
+        }
+    return out
+
+
 # -------------------------------------------------------------------------------- constructibility
 
 def constructibility(cards) -> dict:
@@ -304,6 +333,9 @@ def main():
         with open(os.path.join(OUT_DIR, name), "w", encoding="utf-8") as f:
             json.dump(obj, f, indent=2, ensure_ascii=False)
 
+    with open(PTCG_TEMPLATES, "w", encoding="utf-8") as f:
+        json.dump(build_runtime_templates(priors), f, indent=2, ensure_ascii=False)
+
     write_report(archetypes, meta_share, matrix, vuln, con, matchup_src)
 
     # Console summary (mapping coverage per archetype).
@@ -318,7 +350,7 @@ def main():
               f"{c['by_copies']:.0%} (copies){flag}")
     print(f"  TOTAL {tot_mapped}/{tot_rows} rows mapped ({tot_mapped/tot_rows:.1%})")
     print(f"\nwrote archetype_priors.json, human_matchup_matrix.json, vulnerability_profiles.json "
-          f"to {OUT_DIR}\nwrote report to {REPORT}")
+          f"to {OUT_DIR}\nwrote runtime templates to {PTCG_TEMPLATES}\nwrote report to {REPORT}")
 
 
 if __name__ == "__main__":

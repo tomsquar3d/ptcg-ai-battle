@@ -514,3 +514,36 @@ Data artifacts only; no runtime Disruption Planner yet.
 - Functional DCS (measured Δ opponent first-attack turn / turns-to-6 with disruption in vs out).
 - Feed priors into the opponent-model archetype templates (`src/ptcg/opponent.py` placeholder).
 - Runtime Disruption Planner (EDV timing) — deferred per task scope.
+
+## #12 — Wire human-meta priors into the opponent model (`src/ptcg/archetypes.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/ptcg/archetypes.py`, `src/ptcg/archetype_templates.json`, `scripts/archetypes_smoke.py`
+
+### Goal
+Fill the placeholder in the archetype classifier (`opponent.py` shipped the mechanism but no real
+templates — §4's "opponent inference" originality play). Turn the #11 priors into `Archetype`
+templates the classifier + zone model consume.
+
+### Method
+`build_priors.py` now also emits `src/ptcg/archetype_templates.json` (into the agent package so it
+bundles): per archetype `template[card_id] = round(expected_copies)` (zeros dropped → the typical
+list), `prior = meta_share`. `archetypes.load_archetypes()/default_archetypes()` load them into
+`Archetype` objects; `build_opponent_belief` docstring now points there (parameter kept explicit —
+no silent import, opponent.py stays pure/non-breaking).
+
+### Result (`scripts/archetypes_smoke.py`; opponent_smoke regression green)
+```
+8 templates load, sizes 47-59 (mega-greninja 47 — CRI namesake out of pool), priors = meta share
+self-consistency : each archetype fed its own template -> itself, 8/8
+discrimination   : shared Dragapult core (Dreepy/Drakloak/Dragapult ex) -> 99% on the 3 Dragapult
+                   variants, 0 on unrelated decks; all 8 signature cards pin their archetype;
+                   no evidence -> normalized priors (MAP = n-zoroark, the largest meta share)
+```
+The shared-core behaviour is the point: partial evidence yields *calibrated ambiguity* among
+variants, not false confidence.
+
+### Next
+- Feed `default_archetypes()` into a critical-turn determinization sampler (draw opponent hands
+  from the MAP template's zone model) and A/B vs the current our-deck-filler determinization.
+- Refine templates from simulator replays once mining exists (human meta will diverge — §6).

@@ -17,8 +17,9 @@
 
 3. `Archetype` + `classify_archetype` — the Bayesian archetype classifier: posterior over a
    set of archetype templates given the revealed cards (naive multinomial bag-of-cards with
-   additive smoothing). The *framework* is here and unit-tested; the real archetype templates
-   and meta-share priors come from replay mining (§5) — until then callers pass their own.
+   additive smoothing). The *framework* is here; the real human-meta templates + meta-share
+   priors load from `archetypes.default_archetypes()` (mined from TrainerHill by
+   `scripts/build_priors.py`). Replay mining (§5) will later refine them from the simulator meta.
 
 Pure module (no native import). Consumes the `Observation` dataclass.
 """
@@ -244,6 +245,7 @@ def build_opponent_belief(
       revealed-card evidence; without it, evidence falls back to what's visible right now.
     - `archetypes`: enables the archetype posterior; its MAP template drives the zone model
       unless `deck_template` is given explicitly (e.g. a known deck for determinization/tests).
+      Pass `archetypes.default_archetypes()` for the human-meta set; omit for no classification.
     """
     state = getattr(observation, "current", None)
     if state is None:
