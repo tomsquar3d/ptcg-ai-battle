@@ -251,3 +251,49 @@ sample: revealed 6 (5 distinct) | deck39 hand9 prize6 | P(opp holds Maximum Belt
   hand), expected incoming damage — needs attack/effect reads from the card DB.
 - Real archetype templates + meta-share priors from the replay-mining pipeline (§5), then
   measure classifier accuracy vs replay ground truth (§7.3 originality play).
+
+---
+
+## #6 — Threat model: the belief→decision bridge (`src/ptcg/threat.py`)
+
+**Date:** 2026-07-06
+**Code:** `src/ptcg/threat.py`, `scripts/threat_smoke.py`
+
+### Goal
+Turn board + opponent belief into the danger signals the evaluator/search consume (§4):
+incoming damage, KO-now / KO-next-turn, and — via the opponent zone model — P(they hold a
+gust/switch or the energy they need).
+
+### What was built
+- **Deterministic core (card DB):** `can_pay`/`_cost_shortfall` (energy-cost matcher with
+  colorless/Rainbow/Team-Rocket wilds), `attack_damage` (printed damage × weakness, − typed
+  resistance), `assess_threat` → `ThreatAssessment(incoming_now, incoming_potential, ko_now,
+  ko_potential, best_attack_now, …)`. `incoming_potential` assumes one more energy attach.
+- **Probabilistic layer:** with an `OpponentBelief.zone`, fills `p_gust_in_hand` and
+  `p_needed_energy_in_hand` via `OpponentZoneModel.prob_in_hand`. Card-id sets from
+  `energy_card_ids` and a keyword-heuristic `gust_card_ids`.
+
+### Validation (`scripts/threat_smoke.py 50`)
+```
+1. UNITS : cost matcher + weakness/resistance math
+2. DAMAGE: predicted == actual on 250/254 attack hits (98%) vs the engine's own HP change as
+           ground truth; mean abs err 0.6. The 4 misses are text-scaling attacks
+           (Frost Barrier conditional; "Beat" printed 10 -> actual 60)
+3. THREAT: 2267 decisions, 0 crashes; ko_now 11%, ko_potential 21%, mean incoming 35.2
+sample: our HP 150 | incoming 10 (Beat) potential 30 | P(gust)=0.000 P(energy)=0.999
+```
+The 98% exact-match against engine ground truth is a strong, measurable check on the
+base-damage + weakness model (a §7.3 accuracy figure for the writeup).
+
+### v1 limitations (documented, not hidden)
+- Uses printed `Attack.damage` × weakness only — text-based conditional/scaling damage,
+  abilities, and special-energy multi-type output are unparsed (the 2% of hits, and any
+  printed-damage-0 attacks, which are skipped). Effect-text tagging is a later pipeline.
+- Weakness ×2, resistance −30 (typed) — historical defaults; validate vs engine.
+- Only the opponent's current active is modelled as attacker; bench attackers and
+  switch-to-a-charged-attacker lines are future work (the gust probability is the hook).
+
+### Next
+- Heuristic evaluator (`src/`): weighted terms over prize-race (belief) + deck-quality (draw
+  model) + threat penalties → the week-2 shippable agent, ablation baseline, and clock fallback.
+- Effect-text tagging pass to lift damage accuracy above 98% and enable bench/switch threats.
