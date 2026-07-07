@@ -1,0 +1,178 @@
+{
+  "games_per_pairing": 40,
+  "matrix": {
+    "alakazam-dudunsparce": {
+      "dragapult-blaziken": 0.3,
+      "dragapult-dusknoir": 0.7,
+      "dragapult-ex": 0.425,
+      "mega-greninja-ex": 0.425,
+      "n-zoroark": 0.675,
+      "rockets-honchkrow": 0.225,
+      "slowking-scr": 0.575,
+      "sample": 0.275
+    },
+    "dragapult-blaziken": {
+      "alakazam-dudunsparce": 0.7,
+      "dragapult-dusknoir": 0.55,
+      "dragapult-ex": 0.675,
+      "mega-greninja-ex": 0.85,
+      "n-zoroark": 0.725,
+      "rockets-honchkrow": 0.65,
+      "slowking-scr": 0.5,
+      "sample": 0.1
+    },
+    "dragapult-dusknoir": {
+      "alakazam-dudunsparce": 0.3,
+      "dragapult-blaziken": 0.45,
+      "dragapult-ex": 0.425,
+      "mega-greninja-ex": 0.8,
+      "n-zoroark": 0.613,
+      "rockets-honchkrow": 0.55,
+      "slowking-scr": 0.5,
+      "sample": 0.175
+    },
+    "dragapult-ex": {
+      "alakazam-dudunsparce": 0.575,
+      "dragapult-blaziken": 0.325,
+      "dragapult-dusknoir": 0.575,
+      "mega-greninja-ex": 0.675,
+      "n-zoroark": 0.7,
+      "rockets-honchkrow": 0.6,
+      "slowking-scr": 0.55,
+      "sample": 0.175
+    },
+    "mega-greninja-ex": {
+      "alakazam-dudunsparce": 0.575,
+      "dragapult-blaziken": 0.15,
+      "dragapult-dusknoir": 0.2,
+      "dragapult-ex": 0.325,
+      "n-zoroark": 0.475,
+      "rockets-honchkrow": 0.275,
+      "slowking-scr": 0.45,
+      "sample": 0.05
+    },
+    "n-zoroark": {
+      "alakazam-dudunsparce": 0.325,
+      "dragapult-blaziken": 0.275,
+      "dragapult-dusknoir": 0.388,
+      "dragapult-ex": 0.3,
+      "mega-greninja-ex": 0.525,
+      "rockets-honchkrow": 0.35,
+      "slowking-scr": 0.325,
+      "sample": 0.325
+    },
+    "rockets-honchkrow": {
+      "alakazam-dudunsparce": 0.775,
+      "dragapult-blaziken": 0.35,
+      "dragapult-dusknoir": 0.45,
+      "dragapult-ex": 0.4,
+      "mega-greninja-ex": 0.725,
+      "n-zoroark": 0.65,
+      "slowking-scr": 0.8,
+      "sample": 0.325
+    },
+    "slowking-scr": {
+      "alakazam-dudunsparce": 0.425,
+      "dragapult-blaziken": 0.5,
+      "dragapult-dusknoir": 0.5,
+      "dragapult-ex": 0.45,
+      "mega-greninja-ex": 0.55,
+      "n-zoroark": 0.675,
+      "rockets-honchkrow": 0.2,
+      "sample": 0.175
+    },
+    "sample": {
+      "alakazam-dudunsparce": 0.725,
+      "dragapult-blaziken": 0.9,
+      "dragapult-dusknoir": 0.825,
+      "dragapult-ex": 0.825,
+      "mega-greninja-ex": 0.95,
+      "n-zoroark": 0.675,
+      "rockets-honchkrow": 0.675,
+      "slowking-scr": 0.825
+    }
+  },
+  "ranking": [
+    {
+      "deck": "sample",
+      "win_rate": 0.8,
+      "wins": 256,
+      "losses": 64,
+      "draws": 0,
+      "games": 320,
+      "meta_weighted_win_rate": 0.796
+    },
+    {
+      "deck": "dragapult-blaziken",
+      "win_rate": 0.594,
+      "wins": 190,
+      "losses": 130,
+      "draws": 0,
+      "games": 320,
+      "meta_weighted_win_rate": 0.657
+    },
+    {
+      "deck": "rockets-honchkrow",
+      "win_rate": 0.559,
+      "wins": 178,
+      "losses": 140,
+      "draws": 2,
+      "games": 320,
+      "meta_weighted_win_rate": 0.593
+    },
+    {
+      "deck": "dragapult-ex",
+      "win_rate": 0.522,
+      "wins": 167,
+      "losses": 153,
+      "draws": 0,
+      "games": 320,
+      "meta_weighted_win_rate": 0.587
+    },
+    {
+      "deck": "dragapult-dusknoir",
+      "win_rate": 0.477,
+      "wins": 152,
+      "losses": 167,
+      "draws": 1,
+      "games": 320,
+      "meta_weighted_win_rate": 0.518
+    },
+    {
+      "deck": "alakazam-dudunsparce",
+      "win_rate": 0.45,
+      "wins": 144,
+      "losses": 176,
+      "draws": 0,
+      "games": 320,
+      "meta_weighted_win_rate": 0.515
+    },
+    {
+      "deck": "slowking-scr",
+      "win_rate": 0.434,
+      "wins": 138,
+      "losses": 180,
+      "draws": 2,
+      "games": 320,
+      "meta_weighted_win_rate": 0.494
+    },
+    {
+      "deck": "n-zoroark",
+      "win_rate": 0.352,
+      "wins": 112,
+      "losses": 207,
+      "draws": 1,
+      "games": 320,
+      "meta_weighted_win_rate": 0.355
+    },
+    {
+      "deck": "mega-greninja-ex",
+      "win_rate": 0.312,
+      "wins": 100,
+      "losses": 220,
+      "draws": 0,
+      "games": 320,
+      "meta_weighted_win_rate": 0.363
+    }
+  ]
+}

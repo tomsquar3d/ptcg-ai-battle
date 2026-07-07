@@ -21,6 +21,7 @@ import json
 import os
 import random
 import sys
+import time
 from itertools import combinations
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -97,20 +98,63 @@ def play_pairing(deck_a: list[int], deck_b: list[int], games: int) -> tuple[int,
     return aw, bw, dr
 
 
-def round_robin(decks: dict[str, list[int]], games_per_pairing: int = 50,
-                include_mirror: bool = False) -> dict:
-    """Every unordered pair of decks plays `games_per_pairing` games. Returns a structured result
-    with a win-rate matrix (draws as half) and a ranking by aggregate win rate."""
-    names = list(decks)
-    agg = {n: {"wins": 0, "losses": 0, "draws": 0, "games": 0} for n in names}
-    matrix = {a: {} for a in names}
+def _play_spec(spec):
+    """Worker entry point (module-level so it pickles): play one game, return who won. spec =
+    (deck0, deck1, a_name, b_name, a_is_seat0). Real games are ~5 s each, so a round-robin is
+    parallelized across processes — the SDK's global battle state forbids concurrency *within* a
+    process, but each worker runs its games serially, exactly like the single-process path."""
+    d0, d1, a, b, a_seat0 = spec
+    w = play_game(list(d0), list(d1))
+    return a, b, a_seat0, w
 
+
+def round_robin(decks: dict[str, list[int]], games_per_pairing: int = 50,
+                include_mirror: bool = False, workers: int = 1, progress_every: int = 0) -> dict:
+    """Every unordered pair of decks plays `games_per_pairing` games. Returns a structured result
+    with a win-rate matrix (draws as half) and a ranking by aggregate win rate. `workers` > 1
+    fans games out across processes; `progress_every` prints an ETA line every N games."""
+    names = list(decks)
     pairs = list(combinations(names, 2))
     if include_mirror:
         pairs += [(n, n) for n in names]
 
+    specs = []
     for a, b in pairs:
-        aw, bw, dr = play_pairing(decks[a], decks[b], games_per_pairing)
+        da, db = tuple(decks[a]), tuple(decks[b])
+        for g in range(games_per_pairing):
+            a_seat0 = (g % 2 == 0)
+            d0, d1 = (da, db) if a_seat0 else (db, da)
+            specs.append((d0, d1, a, b, a_seat0))
+
+    tally = {p: [0, 0, 0] for p in pairs}  # (a,b) -> [a_wins, b_wins, draws]
+    total = len(specs)
+    t0 = time.perf_counter()
+
+    def _record(res, i):
+        a, b, a_seat0, w = res
+        rec = tally[(a, b)]
+        if w == 2:
+            rec[2] += 1
+        elif w is not None:
+            a_won = (w == (0 if a_seat0 else 1))
+            rec[0 if a_won else 1] += 1
+        if progress_every and (i % progress_every == 0 or i == total):
+            el = time.perf_counter() - t0
+            eta = el / i * (total - i) if i else 0.0
+            print(f"  [{i}/{total} games] {el/60:.1f} min elapsed, ~{eta/60:.1f} min left", flush=True)
+
+    if workers and workers > 1:
+        import multiprocessing as mp
+        with mp.Pool(workers) as pool:
+            for i, res in enumerate(pool.imap_unordered(_play_spec, specs, chunksize=1), 1):
+                _record(res, i)
+    else:
+        for i, spec in enumerate(specs, 1):
+            _record(_play_spec(spec), i)
+
+    agg = {n: {"wins": 0, "losses": 0, "draws": 0, "games": 0} for n in names}
+    matrix = {a: {} for a in names}
+    for (a, b), (aw, bw, dr) in tally.items():
         tot = aw + bw + dr or 1
         matrix[a][b] = round((aw + 0.5 * dr) / tot, 3)
         matrix[b][a] = round((bw + 0.5 * dr) / tot, 3)
@@ -154,7 +198,8 @@ def main():
              for f in sorted(os.listdir(decks_dir)) if f.endswith(".csv")}
     if len(decks) < 2:
         raise SystemExit(f"need >=2 deck CSVs in {decks_dir}, found {len(decks)}")
-    res = round_robin(decks, games_per_pairing=gpp)
+    workers = max(1, (os.cpu_count() or 2) - 1)
+    res = round_robin(decks, games_per_pairing=gpp, workers=workers, progress_every=50)
     _print(res)
     out = os.path.join(decks_dir, "round_robin_results.json")
     with open(out, "w", encoding="utf-8") as f:

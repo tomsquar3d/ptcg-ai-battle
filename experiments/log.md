@@ -613,3 +613,45 @@ archetypes; only a high-N round-robin will give real strength (coin flips lie at
 - High-N round-robin over the 8 candidates (+ sample) → real matchup matrix + ranking.
 - Meta-weighted selection (weight opponents by `meta_share`); then hill-climb over flex slots.
 - Ship the winner as the first non-sample `deck.csv` (get the agent off the stock deck).
+
+## #15 — Candidate round-robin: the deck eval is pilot-confounded (`experiments/candidate_round_robin.*`)
+
+**Date:** 2026-07-07
+**Code:** `scripts/candidate_round_robin.py`; `round_robin()` parallelized (`workers`, progress)
+
+### Setup
+9 decks (8 archetype candidates + the SDK `sample`), N=40 games/pairing (1440 games), both sides
+piloted by the v1 brain, seats alternated. Parallelized across 9 processes (SDK global battle
+state forbids in-process concurrency, so one game/process × 9 workers) — 117 min → ~13 min.
+(First serial N=40 attempt was killed at 26 min: real meta games are ~4.9 s each, ~30× the smoke,
+because full decks play 20-40 turns — the smoke's crippled deck lost in seconds.)
+
+### Result — the sample deck beats every constructed deck
+```
+1. sample              raw 80.0%  meta-wt 79.6%   ← the stock SDK deck
+2. dragapult-blaziken  raw 59.4%  meta-wt 65.7%
+3. rockets-honchkrow   raw 55.9%
+...
+8. n-zoroark           raw 35.2%
+9. mega-greninja-ex    raw 31.2%   (built without its out-of-pool namesake, as predicted)
+every candidate vs sample: 5-33% win rate
+```
+
+### Diagnosis — a confound, not a verdict
+- The candidates track the human meta **among themselves**: Pearson(our candidate-vs-candidate
+  matrix, TrainerHill matchup matrix) = **+0.40**. So the builds + harness are realistic, not noise.
+- Yet all lose ~uniformly to `sample`. Realistic-among-themselves + uniformly-crushed-by-one-simple
+  -deck ⇒ the bottleneck is the **pilot**: the v1 heuristic (greedy turn search, printed-damage eval,
+  no combo/sequencing knowledge) plays a simple beatdown deck near-optimally but fumbles evolution/
+  ability/energy-accel archetypes. Crude auto-builds (energy padding, out-of-pool gaps) add to it.
+- **This is the agent-deck co-evolution problem (§5): you can't rank decks with a pilot too weak to
+  play them.** The 80% gap is far beyond N=40 noise, so the qualitative conclusion is safe.
+
+### Takeaways / next
+- Do NOT read this as "sample is the best deck." Read it as "under our current pilot, the simplest
+  deck wins" — which is itself a real, defensible submission stance for *now* (ship what the agent
+  can pilot). Deck sophistication needs pilot sophistication first.
+- The construction + round-robin machinery works (correlation proves it). The lever is pilot
+  strength (or hand-tuned builds), not more games.
+- Fair-eval ideas: pilot each deck with a deck-aware policy, or measure decks by *consistency*
+  proxies (turn-2 attack rate, energy-attach curve) rather than only win rate under one weak brain.
