@@ -937,7 +937,7 @@ v3-pilot ranking still: 1. sample 81% ... every meta candidate 32-59%.
 - To separate cause (a) vs (b): pit a **hand-tuned real Limitless list** (pool-filtered) vs sample
   under v3 — if it beats sample, my builds were the problem; if not, it's multi-turn planning / meta.
 
-## #24 — ML foundations: state featurization (`src/nn/features.py`)
+## #24 — ML foundations: state + action featurization (`src/nn/features.py`)
 
 **Date:** 2026-07-07
 **Code:** `src/nn/features.py`, `scripts/features_smoke.py`
@@ -951,7 +951,14 @@ raises (perception-style); vocab 1269 (ids 1..1267 + PAD 0 + UNKNOWN 1268 for a 
 Pokémon). Validated: `features_smoke.py` — 1691 states over 8 games, 0 errors, fixed schema, finite
 values, ids in vocab, mask/id consistent.
 
+**Action featurization** (§3 Layer 4 policy head, same file): `encode_actions(select, my_index, ai)
+→ ActionFeatures` — per legal option: its card id (shared embedding vocab) + `OPTION_SCALAR_DIM=27`
+scalars (OptionType one-hot ×17 + attack damage/cost + target-location flags active/bench/hand/
+discard/is-mine + count/index/number). Fixed [MAX_OPTIONS=64] shape, mask-padded, truncation-safe.
+The full belief→network input contract is now defined. Smoke: 1732 states + 8114 options over 8
+games, 0 errors; max 25 options/decision (0 truncated); option-type one-hots verified.
+
 ### Next
-- Action featurization (per-legal-option features for the pointer policy head) — the other hard
-  prerequisite, also pure Python. Then the torch encoder+heads (embedding + zone attention → state
-  vector → policy/value), needing a torch install (training-only; ONNX-CPU for deploy).
+- Torch encoder + heads (embedding table + per-zone attention pooling → state vector; pointer policy
+  head scoring options against it + value head). Needs a **PyTorch install** (training-only; the
+  deployed agent uses ONNX-CPU). Then: self-play recorder → AlphaZero train → wire net into MCTS.

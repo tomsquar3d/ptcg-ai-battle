@@ -34,7 +34,7 @@ def main() -> int:
     ai = {a.attackId: a for a in all_attack()}
     deck = [int(x) for x in open(os.path.join(REPO, "experiments", "candidate_decks", "dragapult-ex.csv")).read().split() if x.strip()]
 
-    n_states = errors = 0
+    n_states = errors = n_actions = max_opts = truncated = 0
     for _g in range(games):
         obs_dict, _ = battle_start(deck, list(deck))
         try:
@@ -58,6 +58,21 @@ def main() -> int:
                     assert sf.hand_ids.min() >= 0 and sf.hand_ids.max() < F.VOCAB_SIZE, "hand id out of vocab"
                     # a filled slot has a non-pad id; an empty slot is padded
                     assert np.all((sf.pokemon_ids != F.PAD_ID) == sf.pokemon_mask), "mask/id mismatch"
+
+                    # --- action featurization ---
+                    af = F.encode_actions(obs.select, gs.my_index, ai)
+                    assert af.option_scalars.shape == (F.MAX_OPTIONS, F.OPTION_SCALAR_DIM)
+                    assert af.option_card_ids.shape == (F.MAX_OPTIONS,)
+                    n_real = min(af.n_options, F.MAX_OPTIONS)
+                    assert af.option_mask.sum() == n_real, "option mask count wrong"
+                    assert np.all(np.isfinite(af.option_scalars)), "non-finite option scalar"
+                    assert af.option_card_ids.min() >= 0 and af.option_card_ids.max() < F.VOCAB_SIZE
+                    if n_real > 0:  # each real option carries exactly one option-type one-hot
+                        oh = af.option_scalars[:n_real, :F.N_OPTION_TYPES].sum(axis=1)
+                        assert np.all(oh == 1.0), "option-type one-hot missing"
+                    n_actions += n_real
+                    max_opts = max(max_opts, af.n_options)
+                    truncated += int(af.n_options > F.MAX_OPTIONS)
                     n_states += 1
                 except Exception as e:
                     errors += 1
@@ -69,10 +84,12 @@ def main() -> int:
 
     assert errors == 0, f"{errors} featurization errors"
     # sanity: globals mostly bounded (normalized), and features actually vary across states
-    print(f"1. SCHEMA   : {n_states} states encoded over {games} games, 0 errors")
-    print(f"2. SHAPES   : pokemon {F.POKEMON_SLOTS}x{F.POKEMON_SCALAR_DIM}, hand {F.MAX_HAND}, "
-          f"globals {F.GLOBAL_DIM}, vocab {F.VOCAB_SIZE}")
-    print("\nOK: state featurization has a fixed schema, finite values, valid ids on every state.")
+    print(f"1. STATE    : {n_states} states encoded over {games} games, 0 errors")
+    print(f"2. ACTION   : {n_actions} options encoded, max {max_opts} options/decision, "
+          f"{truncated} decisions truncated (>{F.MAX_OPTIONS})")
+    print(f"3. SHAPES   : pokemon {F.POKEMON_SLOTS}x{F.POKEMON_SCALAR_DIM}, hand {F.MAX_HAND}, "
+          f"globals {F.GLOBAL_DIM}, options {F.MAX_OPTIONS}x{F.OPTION_SCALAR_DIM}, vocab {F.VOCAB_SIZE}")
+    print("\nOK: state + action featurization — fixed schema, finite values, valid ids on every state.")
     return 0
 
 
