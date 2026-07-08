@@ -1305,3 +1305,35 @@ skip/special-case these. Tractable, not a blocker.
 **Verdict:** BC pretraining (§3 training-path step 1, so far unrealized) is **viable now** and gets
 better daily. Recommended: harvest our own episodes first (cheap, already ours), then expand to the
 top-N teams. Slots into phase 5 as the pretrain corpus alongside the scripted-expert games.
+
+## #35 — Phase 2: scripted line-experts framework + dragapult-dusknoir expert (`src/experts/`) — **TIES v1, gate NOT yet cleared**
+
+**Date:** 2026-07-08 · **Plan:** docs §3d step 2. Built the per-archetype scripted-pilot framework and
+the first expert; the phase-2 bar is "**beat v1 piloting its own archetype**". Current result: **tie**.
+
+**Built.** `src/experts/base.py` — `ScriptedExpert` with the `set_deck`/`choose(obs_dict, time_left)`
+agent contract, a `_Ctx` option-query layer (find PLAY/EVOLVE/ATTACH/ATTACK options by card/attack id,
+board/hand queries, opponent-target finder), full crash-safety, and a **v1 fallback** for any decision
+no rule handles. `src/experts/dragapult_dusknoir.py` — scripts the skeleton line: Rare Candy Dreepy→
+Dragapult ex (when the ex is in hand), evolve up the lines, Crispin before committing, energy onto the
+attacker, **Phantom Dive** as the payoff, and its **damage-counter spread** concentrated on an opponent
+bench target (KO-setup proxy). `src/experts/__init__.py` — `get_expert(name)` registry. Gate harness
+`scripts/gate_expert_vs_v1.py` (expert vs v1 mirror, seats alternated, fan-out `--seed`/`--out`).
+
+**Result (`gate_expert_vs_v1.py`, dragapult-dusknoir mirror, 5×12 = 60 games):** expert W/L/D =
+**30/29/1 = 50.8% ± 6.5%, z = +0.13** vs v1 — a statistical **tie**. All 60 games DONE, 0 crashes/
+timeouts, 1 draw → the framework is sound, but the expert does **not** out-play v1.
+
+**Why (firing probe): the expert is ~90% v1.** It fires a scripted rule on only ~8 of ~75 decisions/
+game (MAIN setup + a couple of Phantom-Dive spread placements) and **defers the other ~67** (Ultra Ball,
+Buddy-Buddy Poffin, draw supporters, Boss's, retreat/switch, most sub-selects) to the v1 fallback. A
+thin override layer on top of v1 structurally can't beat v1 by much on a mirror — and v1's 1-ply
+evaluator already plays this deck's obvious lines competently.
+
+**Interpretation.** To clear the gate the expert must **own more of the turn** with archetype knowledge
+that beats v1's myopia — script bench development (Poffin/Ultra Ball incl. their search sub-selects),
+draw-supporter timing, Boss's-only-when-it-converts (currently deferred), and smarter Phantom-Dive
+targeting off the prize object — using v1 only as a true last resort. That is a fuller rules-based
+pilot, the next iteration. Weak side-signal for #32: even a scripted line-pilot can't outplay v1 on
+dragapult-dusknoir, mildly consistent with "the deck is genuinely weaker," though #32's pilot was the
+net, not v1. **Infrastructure committed; gate open. Phases 3-5 depend on an expert that clears it.**
