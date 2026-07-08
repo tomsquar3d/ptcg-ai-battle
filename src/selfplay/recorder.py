@@ -46,6 +46,40 @@ PI_DIM = F.MAX_OPTIONS + 1
 SOURCE_MCTS = 0
 SOURCE_BC = 1
 
+# auxiliary value targets (docs §3d step 4) — denser, deck-agnostic learning signal alongside z.
+_OT_ATTACK = 13                # OptionType.ATTACK (an attack was declared this decision)
+_T3_HORIZON = 3                # "prize differential at t+3 turns" — engine turn counter horizon
+_ATTACK_CAP = 8.0             # turns-to-first-attack normalization / never-attacked value
+_PRIZE_NORM = 6.0            # prize differential ∈ [-6, 6]
+
+
+def _aux_targets(turns: np.ndarray, movers: np.ndarray, timeline: list, first_attack: dict) -> dict:
+    """Compute the two auxiliary targets per recorded decision, from the mover's perspective:
+      - prize_diff_t3: (my prizes taken − opp prizes taken) at turn+`_T3_HORIZON` (or terminal if the
+        game ended sooner), normalized to [-1, 1]. Rewards moves that build a prize lead.
+      - turns_to_attack: turns from now until this side's FIRST attack (0 once online; `_ATTACK_CAP`
+        if it never attacks), normalized to [0, 1]. Rewards getting an attacker online fast.
+    `timeline` = ascending [(turn, rem0, rem1)]; `first_attack` = {seat: turn|None}."""
+    n = len(turns)
+    pd = np.zeros(n, dtype=np.float32)
+    tta = np.zeros(n, dtype=np.float32)
+    tl = timeline or [(0, 6, 6)]
+    for i in range(n):
+        m = int(movers[i]); t = int(turns[i])
+        target_t = t + _T3_HORIZON
+        rem = (tl[-1][1], tl[-1][2])                 # default = terminal prize state
+        for (tt, r0, r1) in tl:
+            if tt <= target_t:
+                rem = (r0, r1)
+            else:
+                break
+        rem_me, rem_opp = (rem[0], rem[1]) if m == 0 else (rem[1], rem[0])
+        pd[i] = np.clip((rem_opp - rem_me) / _PRIZE_NORM, -1.0, 1.0)   # prizes_taken_me − _opp
+        fa = first_attack.get(m)
+        val = _ATTACK_CAP if fa is None else max(0, fa - t)
+        tta[i] = min(val, _ATTACK_CAP) / _ATTACK_CAP
+    return {"prize_diff_t3": pd, "turns_to_attack": tta}
+
 
 # --- per-game buffer -----------------------------------------------------------------
 
@@ -66,8 +100,10 @@ class _Buffer:
     mover: list = field(default_factory=list)   # int
 
     source: list = field(default_factory=list)  # SOURCE_MCTS (soft π) | SOURCE_BC (one-hot expert)
+    turn: list = field(default_factory=list)     # engine turn counter at the decision (for aux targets)
 
-    def add(self, sf, af, root_visits: Mapping[int, int], mover: int, source: int = 0) -> None:
+    def add(self, sf, af, root_visits: Mapping[int, int], mover: int, source: int = 0,
+            turn: int = 0) -> None:
         v = np.zeros(PI_DIM, dtype=np.int32)
         for a, c in root_visits.items():
             if a == mcts._PASS:
@@ -79,6 +115,7 @@ class _Buffer:
         self.visits.append(v)
         self.mover.append(mover)
         self.source.append(source)
+        self.turn.append(turn)
 
     def __len__(self) -> int:
         return len(self.st)
@@ -111,6 +148,7 @@ class _Buffer:
             "mover": mover,
             "z": z,
             "source": np.asarray(self.source, dtype=np.int8),
+            "turn": np.asarray(self.turn, dtype=np.int16),
         }
 
 
@@ -269,6 +307,8 @@ def record_mixed_game(pilots: Mapping[int, Pilot], decks: Mapping[int, Sequence[
     result = -1
     turns = 0
     t0 = time.monotonic()
+    timeline: list = []                       # ascending [(engine_turn, prize_rem0, prize_rem1)]
+    first_attack = {0: None, 1: None}         # first turn each seat declared an attack
 
     obs_dict, _ = battle_start(decks[0], list(decks[1]))
     if obs_dict is None:
@@ -285,6 +325,17 @@ def record_mixed_game(pilots: Mapping[int, Pilot], decks: Mapping[int, Sequence[
                 break
             turns += 1
             mi = cur.yourIndex if cur is not None else 0
+            turn_no = int(getattr(cur, "turn", 0) or 0) if cur is not None else 0
+            if cur is not None:                # sample the prize timeline (prizes only decrease)
+                try:
+                    rem0 = len(cur.players[0].prize or [])
+                    rem1 = len(cur.players[1].prize or [])
+                    if not timeline or timeline[-1][0] != turn_no:
+                        timeline.append((turn_no, rem0, rem1))
+                    else:
+                        timeline[-1] = (turn_no, rem0, rem1)
+                except Exception:
+                    pass
             n = len(sel.option)
             if n == 0:
                 obs_dict = battle_select([])
@@ -304,7 +355,14 @@ def record_mixed_game(pilots: Mapping[int, Pilot], decks: Mapping[int, Sequence[
                     sf = F.encode_state(build_game_state(obs, card_index), card_index, attack_index,
                                         deck_summary=ds, archetype_id=aid)
                     af = F.encode_actions(sel, mi, attack_index)
-                    buf.add(sf, af, rv, mi, source)
+                    buf.add(sf, af, rv, mi, source, turn=turn_no)
+                except Exception:
+                    pass
+            if pick and first_attack[mi] is None:   # record this side's first attack turn
+                try:
+                    if any(int(getattr(sel.option[i], "type", -1) or -1) == _OT_ATTACK
+                           for i in pick if 0 <= i < n):
+                        first_attack[mi] = turn_no
                 except Exception:
                     pass
             if pick is None:
@@ -313,8 +371,11 @@ def record_mixed_game(pilots: Mapping[int, Pilot], decks: Mapping[int, Sequence[
     finally:
         battle_finish()
 
+    tup = buf.finalize(result)
+    if tup is not None:
+        tup.update(_aux_targets(tup["turn"], tup["mover"], timeline, first_attack))
     stats = GameStats(len(buf), turns, result, time.monotonic() - t0)
-    return buf.finalize(result), stats
+    return tup, stats
 
 
 def record_game(deck: Sequence[int], card_index: Mapping, attack_index: Mapping, *,

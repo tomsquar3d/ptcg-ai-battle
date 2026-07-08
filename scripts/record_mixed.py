@@ -61,6 +61,9 @@ def _check(tup: dict) -> str:
     assert tup["deck_summary"].shape[1:] == (28,) and tup["archetype_id"].shape == (d,)
     assert tup["source"].shape == (d,)
     assert set(np.unique(tup["z"]).tolist()) <= {-1.0, 0.0, 1.0}
+    # aux value targets (docs §3d step 4)
+    assert tup["prize_diff_t3"].shape == (d,) and tup["turns_to_attack"].shape == (d,)
+    assert np.all(np.abs(tup["prize_diff_t3"]) <= 1.0) and np.all((0.0 <= tup["turns_to_attack"]) & (tup["turns_to_attack"] <= 1.0))
     vt = tup["visits"].sum(1)
     assert (vt > 0).all(), "a recorded decision has zero visits"
     om = tup["option_mask"]
@@ -71,7 +74,9 @@ def _check(tup: dict) -> str:
     nb = int((tup["source"] == SOURCE_BC).sum())
     nm = int((tup["source"] == SOURCE_MCTS).sum())
     return (f"{d} dec (MCTS {nm}/BC {nb}), z(+{int((tup['z']>0).sum())}/-{int((tup['z']<0).sum())}"
-            f"/={int((tup['z']==0).sum())}), arch{sorted(set(tup['archetype_id'].tolist()))}")
+            f"/={int((tup['z']==0).sum())}), arch{sorted(set(tup['archetype_id'].tolist()))}, "
+            f"prizeΔt3∈[{tup['prize_diff_t3'].min():+.2f},{tup['prize_diff_t3'].max():+.2f}] "
+            f"tta μ={tup['turns_to_attack'].mean():.2f}")
 
 
 def main() -> int:

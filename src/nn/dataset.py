@@ -86,7 +86,9 @@ def split_by_game(buf: Buffer, val_frac: float, seed: int = 0) -> tuple[np.ndarr
 
 
 def make_batch(buf: Buffer, idx: np.ndarray, device: str = "cpu") -> tuple[dict, torch.Tensor, torch.Tensor]:
-    """Slice rows `idx` into (batch dict for PTCGNet.forward, π target, z target)."""
+    """Slice rows `idx` into (batch dict for PTCGNet.forward, π target, z target). v1-schema keys only
+    (deck-conditioning + aux targets are fetched separately via `deck_cond_batch`/`aux_targets` so the
+    legacy trainer/net keep working unchanged)."""
     d = buf.data
     batch = {
         "pokemon_ids": torch.from_numpy(d["pokemon_ids"][idx]).long(),
@@ -104,3 +106,47 @@ def make_batch(buf: Buffer, idx: np.ndarray, device: str = "cpu") -> tuple[dict,
     pi = torch.from_numpy(buf.pi[idx]).float().to(device)
     z = torch.from_numpy(d["z"][idx]).float().to(device)
     return batch, pi, z
+
+
+def has_deck_cond(buf: Buffer) -> bool:
+    return "deck_summary" in buf.data
+
+
+def has_aux(buf: Buffer) -> bool:
+    return "prize_diff_t3" in buf.data
+
+
+def deck_cond_batch(buf: Buffer, idx: np.ndarray, device: str = "cpu") -> tuple[torch.Tensor, torch.Tensor]:
+    """Schema-v2 deck-conditioning inputs for the v2 net: (deck_summary [B, DECK_SUMMARY_DIM],
+    archetype_id [B]). Zeros/0 for a buffer recorded before the v2 schema (docs §3d)."""
+    d = buf.data
+    n = len(idx)
+    if "deck_summary" in d:
+        ds = torch.from_numpy(d["deck_summary"][idx]).float()
+        aid = torch.from_numpy(d["archetype_id"][idx]).long()
+    else:
+        ds = torch.zeros(n, F.DECK_SUMMARY_DIM, dtype=torch.float32)
+        aid = torch.zeros(n, dtype=torch.long)
+    return ds.to(device), aid.to(device)
+
+
+def aux_targets(buf: Buffer, idx: np.ndarray, device: str = "cpu") -> dict:
+    """Auxiliary value targets + provenance for a batch (docs §3d step 4):
+      prize_diff_t3 [B] ∈ [-1,1], turns_to_attack [B] ∈ [0,1], source [B] (0=MCTS,1=BC),
+      is_bc [B] bool. Missing keys (legacy buffer) default to zeros so callers can `.get`-style guard
+      on `has_aux(buf)`."""
+    d = buf.data
+    n = len(idx)
+
+    def col(k):
+        arr = d[k][idx] if k in d else np.zeros(n, dtype=np.float32)
+        return torch.from_numpy(np.asarray(arr, dtype=np.float32)).to(device)
+
+    src = torch.from_numpy(np.asarray(d["source"][idx] if "source" in d else np.zeros(n),
+                                      dtype=np.int64)).to(device)
+    return {
+        "prize_diff_t3": col("prize_diff_t3"),
+        "turns_to_attack": col("turns_to_attack"),
+        "source": src,
+        "is_bc": src.eq(1),
+    }

@@ -1367,3 +1367,31 @@ existing v5 buffer/trainer path is unaffected** (dataset/trainer consume the new
 **Note:** basic-box-m is not in the pool yet (no deck/expert built) — add its deck under
 `experiments/candidate_decks/` + register an expert to include it. Phase 4 (aux targets) next, then
 phase 5 generates the real buffer + trains the v2 deck-conditioned net + gates.
+
+## #37 — Phase 4: auxiliary value targets (`recorder.py` aux, `dataset.py` exposure)
+
+**Date:** 2026-07-08 · **Plan:** docs §3d step 4. Two denser, deck-agnostic learning signals recorded
+alongside the sparse game outcome z, to reward the setup lines the net must learn on non-sample decks.
+
+**Targets (per recorded decision, mover's perspective), computed from the game trajectory:**
+- **`prize_diff_t3`** ∈ [-1,1] — (my prizes taken − opp prizes taken) at `turn+3` (engine turn counter;
+  terminal state if the game ends sooner), /6. Rewards building a prize lead. A prize timeline
+  `[(turn, rem0, rem1)]` is sampled each decision (prizes only decrease).
+- **`turns_to_attack`** ∈ [0,1] — turns until this side's FIRST declared attack (detected via a chosen
+  option of type ATTACK), 0 once online, `_ATTACK_CAP=8` if it never attacks, /cap. Rewards getting an
+  attacker online fast — exactly the delayed-payoff setup 1-ply eval undervalues (§3c).
+
+**Plumbing.** `record_mixed_game` tracks the timeline + per-seat first-attack turn and, after
+`finalize`, attaches both target arrays (+ `turn`) to the shard. `dataset.py` gains `deck_cond_batch`
+(deck_summary + archetype_id for the v2 net) and `aux_targets` (prize_diff_t3, turns_to_attack, source,
+is_bc), both defaulting to zeros for pre-v2 buffers — `make_batch`'s (batch, π, z) signature is
+UNCHANGED so the legacy trainer/net keep working.
+
+**Validated.** Aux targets are meaningful, not noise: on a real game **prize_diff_t3 mean = +0.63 for
+winner-mover rows vs −0.66 for loser-mover rows** (tracks the outcome), and **turns_to_attack = 0.33
+early (turn≤4) → 0.00 late (turn≥10)** (decays as sides come online). Data path: 4 mixed shards load
+with deck_summary(28-d)/archetype_id{1,2}/aux/source; the legacy v5 buffer loads with all v2 fields
+defaulted to zero (backward compatible). `record_mixed.py --benchmark` covers it.
+
+**Deferred to phase 5 (with the v2 net):** the encoder's auxiliary heads + the aux MSE loss terms —
+they need the new v2 architecture (deck-conditioning inputs + aux heads), which is built at train time.
