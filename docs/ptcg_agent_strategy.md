@@ -90,6 +90,38 @@ The bottom loop is the flywheel: submissions generate replays → replays refres
 
 ---
 
+## 3c. Search deepened: network-guided determinized MCTS (AlphaZero-style)
+
+Adopted after ladder evidence that one-ply evaluation fails on plan-ahead decks (evolution lines, energy ramp): correct setup moves look bad locally and pay off turns later. This deepens §3b's "critical-turn lookahead" into full MCTS; nothing else in the stack changes.
+
+**Two PTCG deviations from AlphaGo:**
+1. *Hidden information* → **determinized MCTS**: per decision, sample K (~4–8) complete worlds (opponent hand, deck orders, prizes) from the Belief Engine, search each, aggregate action stats. The Bayesian layer IS the determinization sampler — better beliefs → better search. Upgrade path to IS-MCTS if strategy-fusion artifacts appear.
+2. *Chance nodes* (coin flips, draws): stochastic events averaged by resampling; verify how native search_step resolves randomness.
+
+**Spec:** one net, two heads (policy prior + value) over belief-state features; PUCT selection (Q + c·P·√N/(1+n)); leaves scored by value head, with truncated heuristic rollouts as a cross-check until the net beats them (retirement comparison = writeup figure). Governor (layer 5) allocates: routine turns = policy argmax; critical turns (prize-path triggers) = K determinizations × a few hundred sims in ~5s; clock pressure = heuristic fallback. ~10–20 deep turns/game fits the 10-min bank on 2 vCPUs.
+
+**Training = expert iteration:** BC on winner actions/outcomes (AlphaGo's SL phase) → self-play games played BY the MCTS agent, net trained to match search visit distributions + outcomes (AlphaZero loop). Planning knowledge distills into the fast policy path. Server-gated: game generation is embarrassingly parallel CPU work.
+
+**Strategy objects' three jobs here:** encoder features (exact math not relearned); search infrastructure (belief sampler + critical-turn trigger); interpretability for judges (visit counts + named features explain WHY the setup line was chosen).
+
+**Phases:** (A) MCTS-H — uniform priors + heuristic leaves, no nets, unblocks planning immediately; benchmark sims/sec first. (B) MCTS-Net — BC net as priors/leaf eval, ladder A/B vs A. (C) Expert iteration, lab-server-gated.
+
+## 3d. Multi-deck pilot framework (phase 1)
+
+**Motivation (from experiment #32).** The gen-1 net is trained on *sample-deck self-play only*, so it is out-of-distribution piloting any other deck: net-MCTS piloting `dragapult-dusknoir` lost to the same net piloting `sample` 19.7% (z=−6.41). That result is confounded — it measures a blind pilot, not a weak deck — and it caps the whole deck-construction arc behind "the net can't play anything but sample". The fix is a pilot that *knows more than one deck*. This §3d is the phase-1 build to get there; it does not change the shipped stack until its gate passes.
+
+**Design principle.** Keep the exact-math / learned split of §3. We do *not* hand-script the shipped agent — the scripted line-experts here are (a) a BC teacher signal and (b) a per-archetype validation baseline, exactly the role §3c's "truncated heuristic rollouts as a cross-check until the net beats them" plays. The net still owns the decisions; the experts bootstrap it onto new decks and are then retired.
+
+**Build steps (experiments #33+):**
+1. **Deck-conditioned features.** Extend `src/nn/features.py` so `encode_state` also carries an *own-decklist summary* (the pilot must condition on what deck it is playing) + an *archetype embedding id*. **Version the feature schema** (a `SCHEMA_VERSION` constant + shape metadata) so v5's ONNX loader keeps working against the old schema while training moves to the new one.
+2. **Scripted line-experts** (`src/experts/`, one per archetype; start with `dragapult-dusknoir` and `basic-box-m`). Each executes the known skeleton lines: Rare Candy on the first legal turn, energy onto the planned attacker, Crispin before attacking, Phantom Dive spread onto targets inside next-turn KO range (read from the prize object), Boss's Orders only when it converts a prize. **Gate each expert: it must beat v1 while piloting its own archetype** — else the teacher signal is worthless.
+3. **Mixed buffer.** Extend `src/selfplay/recorder.py` to generate across a *deck pool* (sample + the 2 archetypes) × an *opponent pool* (v5 net, v4 heuristic, the scripted experts) over all seat pairings, recording the deck-conditioning features from step 1.
+4. **Auxiliary targets.** The trainer adds aux value heads alongside game outcome z: *prize differential at t+3 turns* and *turns-to-first-attack* — denser, deck-agnostic learning signal that directly rewards the setup lines the experts demonstrate.
+5. **Pretrain then train.** Behavioral-cloning pass on scripted-expert games first, then standard AlphaZero training on the mixed buffer. **Gate:** (a) net-MCTS piloting `dragapult-dusknoir` vs v5 piloting it — must improve *materially*; (b) net-MCTS on `sample` vs v5 on `sample` — must *not regress*; (c) `line_audit` execution rates before/after.
+6. **BC-data reconnaissance.** Check the current volume of the Kaggle daily top-episode exports and report whether a behavioral-cloning dataset from top ladder agents is now viable (§3 training path step 1, so far unrealized).
+
+**Success = the confound is gone:** a net that plays `dragapult-dusknoir` competently lets us re-run #32 as a *clean* deck test (equal-sims, in-distribution pilot both sides) and finally separate "weaker deck" from "blind pilot". If a constructed deck then still loses, the deck arc closes for real; if one wins, deck construction re-opens.
+
 ## 4. Play strategies as computable objects
 
 Strategies are not scripted rules — each is an object the Belief Engine recomputes every turn.

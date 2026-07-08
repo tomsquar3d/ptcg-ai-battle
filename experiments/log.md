@@ -1219,3 +1219,89 @@ is supplied and it throttles as the bank drains. Worth a real-clock timing pass 
 (≈ the 20 s LOW_CLOCK instant threshold), 0 timeouts, even counting ungoverned overhead (determinize /
 session-init / `_multi_pick`). The proportional throttle (≤10% of remaining, instant below 20 s)
 provably prevents clock overrun. **v5 is timeout-safe — ready to submit.**
+
+## #32 — Deck A/B under the net pilot: real meta list vs sample = **sample still wins** (`scripts/gate_deck_ab.py`)
+
+**Hypothesis.** The deck-construction arc (#15-#23) closed under *heuristic* pilots — no constructed
+meta deck beat the SDK `sample` deck (sample won ~73-81%). Open question flagged at v5 ship: does the
+stronger **trained net pilot** change the verdict? Maybe the net can pilot a complex evolution deck
+well enough to finally beat sample. Test: hold the pilot fixed (net-guided MCTS, identical budget/k/
+worlds both seats), vary only the DECK. Seat A = `dragapult-dusknoir` (top constructible archetype from
+the v3 round-robin, a genuine real-meta list: full Dreepy/Drakloak/Dragapult ex line, Buddy-Buddy
+Poffin, Rare Candy, Boss's Orders, Crispin, 8 energy). Seat B = sample. Seats swap every game.
+
+**Method.** New `scripts/gate_deck_ab.py`: same `OnnxGuide` on both seats, each seat determinizes with
+its OWN decklist. 6 workers × 12 games = **72 games**, equal-wall-clock `--budget 0.4`s/move.
+
+**Result.** deck-A (dragapult-dusknoir) W/L/D = **14/57/1 = 19.7% ± 4.7%**, z = **−6.41** vs 50%. Sample
+wins **80.3%** — *wider* than the v3 heuristic-pilot gap (73.3%). The stronger pilot did NOT reverse it.
+
+**Two confounds, both AGAINST Dragapult** (so 19.7% is a floor, not a clean deck-strength number):
+1. **OOD pilot** — the net was trained on sample-deck self-play only, so its policy/value heads are
+   out-of-distribution piloting Dragapult.
+2. **Complexity tax under equal wall-clock** — the complex board yields more options/decision, so each
+   MCTS sim is costlier: deck-A got **796 sims/move vs deck-B's 2765** (3.5×fewer) at the same 0.4 s.
+
+**Verdict.** DECK ARC STAYS CLOSED. No constructed meta deck beats `sample`, now confirmed under the
+strongest pilot we have. Sample ships. The lever remains the PILOT, not the deck. A fully clean deck
+test would require (a) net self-play trained ON the candidate deck (removes confound 1) and (b) equal
+*sims* rather than equal wall-clock (removes confound 2) — not worth it given the −6.41 margin.
+
+## #33 — Multi-deck pilot framework, phase 1: deck-conditioned features (`src/nn/features.py`)
+
+**Date:** 2026-07-08 · **Plan:** docs §3d (appended this session). Motivation = #32's OOD-pilot confound:
+the gen-1 net only knows the sample deck, so it can't fairly pilot anything else. Phase 1 gives the
+featurizer the hooks a multi-deck pilot needs to *condition on which deck it is playing*.
+
+**Change (additive + versioned).** `encode_state` gains two optional schema-v2 fields:
+- `deck_summary` — a **28-d** own-decklist composition vector from new `summarize_deck(deck, ci)`:
+  card-type histogram (7) + Pokémon energy-type histogram (12) + 9 aggregates (basic/ex/mega/ability/
+  stage1/stage2 fractions, avg Pokémon HP, ACE-SPEC present, distinct-card fraction). Static per game.
+- `archetype_id` — a stable embedding id from new `archetype_id_for(name)` (`ARCHETYPE_IDS`, vocab 16;
+  0 = unknown/generic, sample=1, dragapult-dusknoir=2, basic-box-m=3, …).
+`SCHEMA_VERSION = 2` documents the contract.
+
+**Backward-compat (the requirement): v5 keeps working.** The new fields default to zeros/0, so
+`encode_state` stays a single code path. The shipped v5 `OnnxGuide` reads only the seven v1 arrays by
+name (`export_onnx._STATE_ARGS`) and calls `encode_state` without the new kwargs → it gets the exact
+old tensors. **Verified:** across 120 live states the six v1 arrays (+ stadium_id) are **byte-identical**
+between a v1-style call and a deck-conditioned call; a v1 call yields zeros; and `OnnxGuide` loads and
+runs unchanged under schema v2. Durable regression added to `scripts/features_smoke.py` (prints
+`0. SCHEMA v2 …`). The v2 net architecture (deck_summary MLP + archetype embedding) is built when we
+train in phase 5 — phase 1 is just the interface.
+
+## #34 — Phase 6: Kaggle top-episode export recon → **BC dataset is VIABLE now** (recon only, no code)
+
+**Date:** 2026-07-08. Question from §3d step 6: is a behavioral-cloning dataset from top ladder agents
+viable yet? Checked via the authed `kaggle` CLI (token in `~/.kaggle/access_token`; comp
+`pokemon-tcg-ai-battle`).
+
+**Ladder state (bonus — resolves an open item):** v5 (`submission_v5.tar.gz`, 54454217) scored
+**publicScore 553.9**, up from **v1's 509.0** (54411051) — the trained net is a **real ~+45-pt ladder
+gain vs the heuristic**, corroborating the #29/#30 gates on live opponents. Leaderboard = **20 teams**,
+top score **1178.9** (~2× ours — strong opponents to clone from).
+
+**Episode/replay availability (the deliverable):** `kaggle competitions episodes <submission_id>` lists
+a submission's games; **v5 has 48, v1 has 55** (accumulating as the ladder plays, growing daily).
+`kaggle competitions replay <episode_id>` downloads the full replay (~1.9 MB JSON). Structure is
+directly BC-usable: top-level `rewards` (e.g. `[1,-1]`) gives the **winner**; `steps` = per-turn list of
+2 agent-entries, each with `observation` (**includes `select.option` = the exact legal-option list the
+agent saw**) + `action` (**chosen option indices**, our agent contract) + `status`(ACTIVE/INACTIVE) +
+`reward`. So a replay yields full winner (and loser) trajectories from each player's own perspective —
+**our existing `encode_state`/`encode_actions` featurizer consumes them as-is.**
+
+**Volume:** ~50 episodes/submission now → ~100 games across our 2 submissions immediately; ~87 ACTIVE
+decisions/game of which **69/87 (~79%) cleanly index their shown option list** → ~2–3k winner-action
+samples available *today* from our own episodes alone, growing ~daily. **Scales to the full field:**
+the leaderboard CSV carries each `teamId`, and `kaggle competitions team-submissions <teamId>` → their
+submissions → `episodes` → `replay` opens the 20-team corpus (potentially 10k+ games).
+
+**One parsing detail to handle when we build the BC loader (phase 5):** the ~21% non-fitting actions
+are (a) the initial 60-card **deck-return** step (action = card ids, not option indices — identifiable
+by length 60) and (b) a minority of select contexts where the action isn't a plain option index
+(value/count selects, or an obs↔action alignment offset within multi-select steps). The loader must
+skip/special-case these. Tractable, not a blocker.
+
+**Verdict:** BC pretraining (§3 training-path step 1, so far unrealized) is **viable now** and gets
+better daily. Recommended: harvest our own episodes first (cheap, already ours), then expand to the
+top-N teams. Slots into phase 5 as the pretrain corpus alongside the scripted-expert games.

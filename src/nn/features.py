@@ -14,16 +14,26 @@ Design rules (mirror `perception.py`):
   - **Fixed shapes** — every state yields identical array shapes (padded + masked), so batches stack.
 
 Perspective is always "me": zone 0 = our active, 1..5 our bench, 6 opp active, 7..11 opp bench.
+
+**Schema versioning (docs §3d).** `SCHEMA_VERSION` tracks the featurization contract:
+  - v1 — the fields the shipped v5 ONNX net reads: pokemon_ids/scalars/mask, hand_ids/mask,
+    stadium_id, globals. (This is what `export_onnx._STATE_ARGS` bakes in.)
+  - v2 — v1 PLUS `deck_summary` (own-decklist composition vector) + `archetype_id` (embedding id),
+    so a multi-deck pilot can CONDITION on which deck it is playing.
+The v2 fields are ADDITIVE and default to zeros/0, so `encode_state` is a single code path and the
+v5 loader — which only reads the v1 fields by name — is unaffected. Only a v2-trained net consumes them.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from dataclasses import dataclass, field
+from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
 from ptcg.threat import attack_potential
 from ptcg.prize import prize_race
+
+SCHEMA_VERSION = 2         # bump when the array set / shapes change (see module docstring)
 
 # --- vocabulary + shapes (the encoder reads these) -----------------------------------
 PAD_ID = 0                 # empty slot / padding
@@ -35,6 +45,75 @@ MAX_HAND = 12              # hand card-id slots (padded/truncated)
 POKEMON_SLOTS = 2 * (1 + MAX_BENCH)      # 12: our active+bench then opp active+bench
 POKEMON_SCALAR_DIM = 10
 GLOBAL_DIM = 36
+
+# --- deck-conditioning (schema v2, docs §3d) -----------------------------------------
+# CardType enum values (mirror cg.api.CardType; kept native-free like perception).
+_CT_POKEMON, _CT_ITEM, _CT_TOOL, _CT_SUPPORTER, _CT_STADIUM, _CT_BASIC_ENERGY, _CT_SPECIAL_ENERGY = range(7)
+_N_CARD_TYPES = 7
+_N_ENERGY_TYPES = 12       # cg.api.EnergyType 0..11 (COLORLESS..TEAM_ROCKET)
+_N_DECK_AGG = 9            # aggregate scalars below
+DECK_SUMMARY_DIM = _N_CARD_TYPES + _N_ENERGY_TYPES + _N_DECK_AGG   # 28
+
+# Archetype embedding ids. 0 = unknown/generic; keep stable (they index an embedding row). Room to grow.
+ARCHETYPE_VOCAB = 16
+ARCHETYPE_IDS: dict[str, int] = {
+    "unknown": 0, "sample": 1, "dragapult-dusknoir": 2, "basic-box-m": 3,
+    "dragapult-blaziken": 4, "dragapult-ex": 5, "alakazam-dudunsparce": 6, "mega-greninja-ex": 7,
+    "n-zoroark": 8, "rockets-honchkrow": 9, "slowking-scr": 10,
+}
+
+
+def archetype_id_for(name: Optional[str]) -> int:
+    """Map an archetype/deck name → its stable embedding id (0 = unknown). Never raises."""
+    if not name:
+        return 0
+    return ARCHETYPE_IDS.get(str(name).strip().lower(), 0)
+
+
+def summarize_deck(decklist: Optional[Sequence[int]], card_index: Mapping[int, Any]) -> np.ndarray:
+    """Fixed-length composition summary of an own 60-card decklist (schema v2). Deck-identity signal
+    for the pilot: card-type histogram (7) + Pokémon energy-type histogram (12) + aggregates (9).
+    Static per game — compute once and pass into `encode_state`. Returns zeros for a None/empty deck."""
+    v = np.zeros(DECK_SUMMARY_DIM, dtype=np.float32)
+    if not decklist:
+        return v
+    n = float(len(decklist)) or 1.0
+    type_hist = np.zeros(_N_CARD_TYPES, dtype=np.float32)
+    energy_hist = np.zeros(_N_ENERGY_TYPES, dtype=np.float32)
+    n_basic_pk = n_ex = n_mega = n_ability = n_stage1 = n_stage2 = n_ace = 0
+    hp_sum = 0.0
+    n_pk = 0
+    for cid in decklist:
+        c = card_index.get(cid)
+        if c is None:
+            continue
+        ct = int(getattr(c, "cardType", 0) or 0)
+        if 0 <= ct < _N_CARD_TYPES:
+            type_hist[ct] += 1.0
+        if ct == _CT_POKEMON:
+            n_pk += 1
+            et = int(getattr(c, "energyType", 0) or 0)
+            if 0 <= et < _N_ENERGY_TYPES:
+                energy_hist[et] += 1.0
+            hp_sum += getattr(c, "hp", 0) or 0
+            n_basic_pk += bool(getattr(c, "basic", False))
+            n_ex += bool(getattr(c, "ex", False))
+            n_mega += bool(getattr(c, "megaEx", False))
+            n_stage1 += bool(getattr(c, "stage1", False))
+            n_stage2 += bool(getattr(c, "stage2", False))
+            n_ability += bool(getattr(c, "skills", None))
+        n_ace += bool(getattr(c, "aceSpec", False))
+    agg = [
+        n_basic_pk / n, n_ex / n, n_mega / n, n_ability / n,
+        n_stage1 / n, n_stage2 / n,
+        (hp_sum / n_pk / 300.0) if n_pk else 0.0,
+        min(n_ace, 1),                               # ACE SPEC present (deck legality caps at 1)
+        len(set(decklist)) / n,                      # distinct-card fraction (consistency proxy)
+    ]
+    v[:_N_CARD_TYPES] = type_hist / n
+    v[_N_CARD_TYPES:_N_CARD_TYPES + _N_ENERGY_TYPES] = energy_hist / n
+    v[_N_CARD_TYPES + _N_ENERGY_TYPES:] = np.asarray(agg, dtype=np.float32)
+    return v
 
 MAX_OPTIONS = 64          # legal options per decision (padded/truncated for the policy head)
 N_OPTION_TYPES = 17       # cg.api.OptionType values 0..16
@@ -66,6 +145,9 @@ class StateFeatures:
     hand_mask: np.ndarray         # bool    [MAX_HAND]
     stadium_id: np.int32          # scalar card id (PAD_ID if none)
     globals: np.ndarray           # float32 [GLOBAL_DIM]
+    # schema v2 (docs §3d) — deck conditioning; zeros/0 when not supplied (v5 ONNX ignores these):
+    deck_summary: np.ndarray = field(default_factory=lambda: np.zeros(DECK_SUMMARY_DIM, dtype=np.float32))
+    archetype_id: np.int32 = np.int32(0)
 
 
 def _pk_scalars(pv: Any, is_active: bool, side: int) -> list[float]:
@@ -135,8 +217,14 @@ def _globals(gs: Any, ci: Mapping, ai: Mapping) -> np.ndarray:
 
 
 def encode_state(game_state: Any, card_index: Mapping[int, Any],
-                 attack_index: Mapping[int, Any]) -> StateFeatures:
-    """Featurize a Perception `GameState` into fixed-shape arrays for the encoder network."""
+                 attack_index: Mapping[int, Any], *,
+                 deck_summary: Optional[np.ndarray] = None,
+                 archetype_id: int = 0) -> StateFeatures:
+    """Featurize a Perception `GameState` into fixed-shape arrays for the encoder network.
+
+    Schema v2 (docs §3d): pass `deck_summary` (from `summarize_deck`) + `archetype_id`
+    (from `archetype_id_for`) to condition the net on which deck it is piloting. Both are optional
+    and default to zeros/0 — v1 callers (e.g. the shipped v5 ONNX guide) simply omit them."""
     ids = np.full(POKEMON_SLOTS, PAD_ID, dtype=np.int32)
     scal = np.zeros((POKEMON_SLOTS, POKEMON_SCALAR_DIM), dtype=np.float32)
     mask = np.zeros(POKEMON_SLOTS, dtype=bool)
@@ -154,10 +242,14 @@ def encode_state(game_state: Any, card_index: Mapping[int, Any],
 
     stadium_id = np.int32(getattr(getattr(game_state, "stadium", None), "card_id", PAD_ID) or PAD_ID)
 
+    ds = (deck_summary if deck_summary is not None
+          else np.zeros(DECK_SUMMARY_DIM, dtype=np.float32))
     return StateFeatures(
         pokemon_ids=ids, pokemon_scalars=scal, pokemon_mask=mask,
         hand_ids=hand_ids, hand_mask=hand_mask, stadium_id=stadium_id,
         globals=_globals(game_state, card_index, attack_index),
+        deck_summary=np.asarray(ds, dtype=np.float32),
+        archetype_id=np.int32(archetype_id or 0),
     )
 
 

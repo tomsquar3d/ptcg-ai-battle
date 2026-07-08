@@ -83,6 +83,28 @@ def main() -> int:
             battle_finish()
 
     assert errors == 0, f"{errors} featurization errors"
+
+    # --- schema v2 deck-conditioning + v1/v5 backward-compat (docs §3d) ---
+    ds = F.summarize_deck(deck, ci)
+    assert ds.shape == (F.DECK_SUMMARY_DIM,) and np.all(np.isfinite(ds))
+    assert abs(ds[:7].sum() - 1.0) < 1e-4, "card-type histogram must sum to 1"
+    assert np.all(F.summarize_deck(None, ci) == 0) and np.all(F.summarize_deck([], ci) == 0)
+    assert F.archetype_id_for("dragapult-ex") > 0 and F.archetype_id_for("nope") == 0 and F.archetype_id_for(None) == 0
+    obs_dict, _ = battle_start(deck, list(deck))
+    try:
+        obs = to_observation_class(obs_dict)
+        gs = build_game_state(obs, ci)
+        sf1 = F.encode_state(gs, ci, ai)                                              # v1/v5 call
+        sf2 = F.encode_state(gs, ci, ai, deck_summary=ds, archetype_id=F.archetype_id_for("dragapult-ex"))
+        for fld in ("pokemon_ids", "pokemon_scalars", "pokemon_mask", "hand_ids", "hand_mask", "globals"):
+            assert np.array_equal(getattr(sf1, fld), getattr(sf2, fld)), f"v2 perturbed v1 field {fld}"
+        assert np.all(sf1.deck_summary == 0) and int(sf1.archetype_id) == 0, "v1 call must yield zeros"
+        assert np.array_equal(sf2.deck_summary, ds) and int(sf2.archetype_id) > 0, "v2 must populate"
+    finally:
+        battle_finish()
+    print(f"0. SCHEMA v{F.SCHEMA_VERSION}: deck_summary {F.DECK_SUMMARY_DIM}d + archetype_id; "
+          f"v1 fields byte-identical (v5 ONNX unaffected)")
+
     # sanity: globals mostly bounded (normalized), and features actually vary across states
     print(f"1. STATE    : {n_states} states encoded over {games} games, 0 errors")
     print(f"2. ACTION   : {n_actions} options encoded, max {max_opts} options/decision, "
