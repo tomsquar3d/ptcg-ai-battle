@@ -1337,3 +1337,33 @@ targeting off the prize object — using v1 only as a true last resort. That is 
 pilot, the next iteration. Weak side-signal for #32: even a scripted line-pilot can't outplay v1 on
 dragapult-dusknoir, mildly consistent with "the deck is genuinely weaker," though #32's pilot was the
 net, not v1. **Infrastructure committed; gate open. Phases 3-5 depend on an expert that clears it.**
+
+## #36 — Phase 3: mixed deck-conditioned self-play recorder (`src/selfplay/recorder.py`, `scripts/record_mixed.py`)
+
+**Date:** 2026-07-08 · **Plan:** docs §3d step 3. Extends the recorder to generate across a **deck pool
+× pilot pool over all seat pairings**, recording the phase-1 deck-conditioning features — the direct
+data fix for #32's OOD confound (chosen path B: train the net on the decks it must pilot, rather than
+gating on a scripted expert first).
+
+**Built (additive — old mirror `record_game` untouched):**
+- `Pilot` abstraction: `MctsPilot` (heuristic OR net via injected `prior_fn`/`value_fn`; branch
+  decisions → root visit distribution, `source=MCTS`) and `ExpertPilot` (a scripted line-expert;
+  branch decisions → one-hot BC target, `source=BC`). `build_pilot("heuristic"|"net"|"expert:<arch>")`.
+- `record_mixed_game(pilots, decks, names, …)`: a (possibly) different deck AND pilot per seat; each
+  seat determinizes with its own deck and its recorded states are encoded with that deck's
+  `deck_summary`+`archetype_id`. z still labelled per-mover.
+- `_Buffer` now also stacks `deck_summary`/`archetype_id` (pulled straight off `StateFeatures`) and a
+  `source` tag per decision.
+- CLI `scripts/record_mixed.py`: default pool = {sample, dragapult-dusknoir} × {heuristic, net(with
+  `--onnx-dir`), expert:dragapult-dusknoir} → 5 sides / 25 ordered matchups, cycled per `--seed`;
+  writes to `experiments/selfplay/mixed/` (gitignored). `--benchmark` = built-in smoke.
+
+**Validated** (inline + `--benchmark`): expert rows are one-hot @ dragapult (arch 2); heuristic/net
+rows are soft-π @ their deck (sample arch 1); z = +1 for winner-mover rows; the net-pilot path loads
+and records; `_check` passes (shapes, deck_summary 28-d, ≥1 visit/decision, most-visited option legal).
+Cost ~0.7–2.2 s/game at sims=96/k=1. **New npz keys are additive and land in a separate dir, so the
+existing v5 buffer/trainer path is unaffected** (dataset/trainer consume the new keys in phase 4/5).
+
+**Note:** basic-box-m is not in the pool yet (no deck/expert built) — add its deck under
+`experiments/candidate_decks/` + register an expert to include it. Phase 4 (aux targets) next, then
+phase 5 generates the real buffer + trains the v2 deck-conditioned net + gates.
