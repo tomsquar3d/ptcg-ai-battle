@@ -83,7 +83,15 @@ class PTCGNet(nn.Module):
     def encode_state(self, b: dict) -> torch.Tensor:
         pk = torch.cat([self.card_embed(b["pokemon_ids"]), b["pokemon_scalars"]], dim=-1)
         pk = self.pk_in(pk)                                          # [B,12,d]
-        pk = self.pk_attn(pk, src_key_padding_mask=~b["pokemon_mask"])
+        # A fully-padded board (no Pokémon either side — a degenerate setup state) would make the
+        # transformer softmax over zero keys → NaN. Unmask slot 0 for those rows so attention is
+        # defined; board_pool re-masks by pokemon_mask, so the fabricated token is never pooled in.
+        pad = ~b["pokemon_mask"]
+        all_pad = pad.all(dim=1)
+        if all_pad.any():
+            pad = pad.clone()
+            pad[all_pad, 0] = False
+        pk = self.pk_attn(pk, src_key_padding_mask=pad)
         board = self.board_pool(pk, b["pokemon_mask"])              # [B,d]
 
         hand = self.hand_in(self.card_embed(b["hand_ids"]))

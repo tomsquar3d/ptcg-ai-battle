@@ -81,10 +81,21 @@ def main() -> int:
     gnorm = torch.cat([p.grad.flatten() for p in net.parameters() if p.grad is not None]).norm()
     assert torch.isfinite(gnorm), "non-finite gradient"
 
+    # regression guard: a fully-padded board (no Pokémon either side — a degenerate setup state) must
+    # NOT NaN the transformer (softmax over zero keys). encode_state unmasks slot 0 for such rows.
+    net.eval()
+    empty = collate(states[:1], actions[:1])
+    empty["pokemon_mask"] = torch.zeros_like(empty["pokemon_mask"])   # all slots padded
+    with torch.no_grad():
+        el, ev = net(empty)
+    assert torch.isfinite(ev).all() and torch.isfinite(el[empty["option_mask"]]).all(), \
+        "fully-padded board produced NaN"
+
     print(f"1. FORWARD  : logits {tuple(logits.shape)}, value {tuple(value.shape)}; "
           f"legal finite, padding −inf, policy normalized, value∈(−1,1)")
     print(f"2. BACKWARD : loss {loss.item():.3f}, grad-norm {gnorm.item():.2f} (finite)")
     print(f"3. SIZE     : {net.num_params():,} params (~{net.num_params()*4/1e6:.1f} MB fp32) — ONNX-CPU-friendly")
+    print("4. NAN-GUARD: fully-padded board → finite logits + value")
     print("\nOK: encoder + policy/value heads forward, mask, and backprop correctly.")
     return 0
 

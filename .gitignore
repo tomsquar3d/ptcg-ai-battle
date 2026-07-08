@@ -35,6 +35,9 @@ cg.dll
 libcg*.so
 libcg*.dylib
 
+# Local run logs / scratch
+logs/
+
 # Local / editor / OS
 .claude/
 .obsidian/

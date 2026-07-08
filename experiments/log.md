@@ -1021,3 +1021,43 @@ for sharper π).
 - **Trainer**: batch shards → AlphaZero loss (policy CE + value MSE), checkpoint, `round_robin`
   acceptance gate. Then wire the net as MCTS `prior_fn` + leaf value (small refactor — leaf value
   currently hardcoded) and ONNX-export for deploy.
+
+---
+
+## #27 — ML foundations: AlphaZero trainer + first PTCGNet fit (`src/nn/dataset.py`, `scripts/train_net.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/nn/dataset.py`, `scripts/train_net.py`; bugfix `src/nn/encoder.py` (+ guard in `encoder_smoke.py`)
+
+Trained `PTCGNet` on the first self-play buffer. `dataset.load_buffer` concatenates `.npz` shards and
+derives the **policy target π** = visit distribution renormalized over the real option slots (PASS
+slot dropped from the 64-wide pointer head; dropped mass **reported**, not silently — 3.7% here).
+`train_net.py`: AlphaZero loss (policy CE vs π + value MSE vs z), Adam, grad-clip, **game-level**
+train/val split (decision-level would leak), checkpoint on best held-out policy top-1.
+
+**Buffer:** 120 self-play games (8 procs × 15, sims=160/k=2), **2838 decisions**, ~2 min wall.
+
+**Result (30 epochs, val = 18 held-out games / 446 decisions):**
+- **Policy top-1 22% → ~70%** — the net predicts the MCTS teacher's most-visited move ~7/10 on
+  *unseen games*. A strong learned prior for the search.
+- **Value-sign acc 48% → ~64%** — predicts the eventual winner from mid-game states.
+- **Value head overfits** (train MSE 1.0→0.37, val MSE 1.0→1.2 diverging after ~ep4) — expected in the
+  small-data regime: z is a high-variance single-game Monte-Carlo label, so the scalar value memorizes
+  while the denser policy target generalizes. Fix is *more games*, not code; checkpoint is selected on
+  policy top-1, so the value overfit doesn't pick a bad net. Early-stopping / more data next.
+
+**BUG FOUND & FIXED (correctness, affects deploy too):** a fully-padded Pokémon board (no active/bench
+either side — a degenerate setup state, **153/2838 = 5.4%** of decisions) made the board
+`TransformerEncoderLayer` softmax over zero keys → **NaN**, which propagated to the value head and
+silently poisoned batch-mean metrics (argmax/sign swallowed it, so it showed as `nan` CE/MSE only).
+Fixed in `encode_state`: unmask slot 0 for fully-padded rows (board_pool re-masks by `pokemon_mask`,
+so the fabricated token is never pooled in). Added a regression guard to `encoder_smoke.py`. This
+matters beyond training — the net is a future MCTS leaf evaluator and must honour the never-NaN
+contract on any legal state.
+
+### Next
+- Bigger buffer (thousands of games — the value head needs it) + early-stop.
+- Wire the net into `search.mcts` as `prior_fn` (hook exists) + leaf value (replace the hardcoded
+  `_value` with the net's tanh value; small refactor), then **round_robin acceptance gate** (net-MCTS
+  vs plain v4 MCTS — the real test: does the learned prior/value beat the heuristic teacher?).
+- ONNX-CPU export for deploy once a net passes the gate.
