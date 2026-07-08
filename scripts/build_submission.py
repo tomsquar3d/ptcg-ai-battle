@@ -30,6 +30,29 @@ def build(version: str) -> None:
         shutil.rmtree(dst_pkg, ignore_errors=True)
         shutil.copytree(src_pkg, dst_pkg, ignore=shutil.ignore_patterns("__pycache__"))
 
+    # 1b) neural submissions only: vendor a TORCH-FREE nn subset (featurization + the ONNX guide)
+    #     and copy the trained ONNX models in. Gated on the agent actually importing onnx_guide, so
+    #     non-neural submissions stay lean and torch-free.
+    agent_src = ""
+    agent_py = os.path.join(target, "agent.py")
+    if os.path.exists(agent_py):
+        with open(agent_py) as fh:
+            agent_src = fh.read()
+    if "onnx_guide" in agent_src:
+        dst_nn = os.path.join(target, "nn")
+        shutil.rmtree(dst_nn, ignore_errors=True)
+        os.makedirs(dst_nn)
+        for f in ("__init__.py", "features.py", "onnx_guide.py"):   # NO encoder/guide/dataset (torch)
+            shutil.copy2(os.path.join(REPO, "src", "nn", f), os.path.join(dst_nn, f))
+        ckpt_dir = os.path.join(REPO, "experiments", "checkpoints")
+        for model in ("value.onnx", "policy.onnx"):
+            src_model = os.path.join(ckpt_dir, model)
+            if os.path.exists(src_model):
+                shutil.copy2(src_model, os.path.join(target, model))
+            elif not os.path.exists(os.path.join(target, model)):
+                raise SystemExit(f"missing ONNX model for {version}: {model} "
+                                 f"(run scripts/export_onnx.py)")
+
     # 2) ensure the SDK (with native libs) is present — copy from v0 if missing
     dst_cg = os.path.join(target, "cg")
     if not os.path.isdir(dst_cg):
