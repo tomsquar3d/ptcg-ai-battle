@@ -983,3 +983,41 @@ fp32)** → ONNX-CPU-friendly. torch is dev/training-only (`requirements-train.t
 - **Trainer**: AlphaZero loss (policy CE vs π + value MSE vs z); acceptance-gate new checkpoints via
   the existing `round_robin` harness. Then wire the net as MCTS `prior_fn` + leaf value (small refactor
   — leaf value currently hardcoded), and ONNX-export for deploy.
+
+---
+
+## #26 — ML foundations: self-play recorder (`src/selfplay/recorder.py`)
+
+**Date:** 2026-07-07
+**Code:** `src/selfplay/recorder.py`, `scripts/record_selfplay.py`
+
+The AlphaZero data pump. Plays full **MCTS-H self-play** games (both seats driven by the same
+determinize → PUCT-MCTS pipeline) over the native engine and, at every genuine single-select branch,
+emits a training tuple: inputs = `encode_state`⊕`encode_actions`; policy target **π** = the MCTS root
+visit distribution over legal options + a trailing PASS slot (width `MAX_OPTIONS+1`, stored as raw
+counts so the trainer picks normalization / PASS handling); value target **z** = game outcome from the
+*deciding player's* perspective (+1/−1/0), back-filled at game end. Multi-select (mulligan/prize/
+discard) and truly-forced single-option steps are resolved by a one-world leaf-scored heuristic and
+**not** recorded — value still flows through them via the outcome. No change to `mcts.search` was
+needed: it already returns `root_visits` in its stats; the recorder calls the pipeline directly (the
+frozen v4 `agent.choose` stays untouched). Search runs on the SDK's separate `agent_ptr` sandbox, so
+driving `battle_select` and `search_*` from the same loop is safe.
+
+**Validated** (`record_selfplay.py --benchmark`, then a 3-game write + reload):
+- Well-formed tuples: `visits` [D,65], every recorded decision has ≥1 visit, most-visited real option
+  is always legal (mask-checked), z ∈ {−1,0,+1} with the correct per-mover sign (winner's decisions
+  +1, loser's −1).
+- **Timing:** a full ~146-turn game = **5.9 s** at `sims=160, k=2` (~**0.05 s/decision**, ~126
+  decisions/game). Cheap enough to fan out across processes (one game/process — SDK global battle).
+- **End-to-end train step works:** loaded a shard → `PTCGNet.forward` → policy CE (vs visit-π) +
+  value MSE (vs z) → finite grads. Confirms the recorded schema is network-compatible — the trainer's
+  inner loop is exactly this.
+
+Shards are gitignored (`*.npz`); torch-free recorder (numpy only), so it stays importable in the
+agent if ever needed. `sims`/`k` are the quality⇄throughput knobs (160/2 = fast first buffer; raise
+for sharper π).
+
+### Next
+- **Trainer**: batch shards → AlphaZero loss (policy CE + value MSE), checkpoint, `round_robin`
+  acceptance gate. Then wire the net as MCTS `prior_fn` + leaf value (small refactor — leaf value
+  currently hardcoded) and ONNX-export for deploy.
