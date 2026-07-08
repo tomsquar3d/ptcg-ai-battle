@@ -1178,3 +1178,44 @@ nn dep the shipped agent needs** (torch stays dev-only).
   onnx_guide)}`. Validate in cabt (all DONE/DONE, move-time under clock, no torch import), submit.
 - Higher-budget spot check (5s critical) + bigger-N re-gate to tighten 58.5%.
 - Flywheel: this net → self-play → retrain → re-gate (each gen should widen the edge).
+
+---
+
+## #31 — v5 submission bundle: ONNX net-guided MCTS-H agent (`submissions/v5/`)
+
+**Date:** 2026-07-08
+**Code:** `submissions/v5/` (main.py, agent.py, value.onnx, policy.onnx, deck.csv, vendored cg/ptcg/search/nn), `scripts/build_submission.py` (+nn/onnx), `scripts/validate_v5.py`
+
+The shippable trained agent. Same pipeline as v4 (perception → governor → determinize → PUCT MCTS →
+most-visited) but MCTS priors + leaf value come from the trained net via `OnnxGuide` (onnxruntime,
+single-threaded). **Graceful degradation:** if onnxruntime or the .onnx files are missing at runtime
+`_GUIDE` stays None and it falls back to plain heuristic MCTS-H (v4) — the net can never turn into a
+crash/timeout loss. `build_submission.py` now vendors a **torch-free** nn subset (features.py +
+onnx_guide.py only — no encoder/guide/dataset) and copies value/policy.onnx in, gated on the agent
+importing onnx_guide.
+
+**Validation (`validate_v5.py`, torch import poisoned to simulate the Kaggle runtime):**
+- **torch blocked ✓** — bundle runs on onnxruntime alone (the only nn dep shipped).
+- **net actually loads ✓** (not silently degrading) — caught a validator bug first: the net loads
+  lazily on the first `choose()`, not in `set_deck`, so the check must come after real moves.
+- **4/4 games DONE, 152 moves, 0 illegal/exceptions**; max move 5.2 s (= 5 s critical governor budget
+  + overhead).
+- **Bundle 5.3 MB** (`main.py`+`deck.csv` at top level, no torch/.pt) — far under the 197.7 MiB cap.
+
+**Timing caveat (follow-up):** one v5-vs-v5 game ran 157 s wall (both sides net-guided, ~78 s our
+share — within the 600 s/game clock). The validator passes `time_left=None`, so the governor's
+low-clock throttle (goes instant under `LOW_CLOCK_S`) never engaged; on Kaggle `remainingOverageTime`
+is supplied and it throttles as the bank drains. Worth a real-clock timing pass before/after submit.
+
+### Next
+- Submit v5 to Kaggle (own ladder μ) — the ground-truth signal vs real opponents.
+- Real-clock timing validation (feed a draining `time_left`, confirm never > 600 s/game).
+- 5 s-budget spot check + bigger-N re-gate to tighten 58.5%.
+- Flywheel gen #2: self-play from v5 → retrain → re-gate (should widen the edge).
+
+**Timing caveat RESOLVED (`scripts/timing_v5.py`).** Drove v5-vs-v5 with a draining per-seat bank
+(injected `remainingOverageTime`). Bank=600: worst seat-time **28.2 s / 600 s** (20× margin), min bank
+571.8 s, 0 timeouts. Bank=45 stress: the governor throttle engaged — min bank floored at **19.2 s**
+(≈ the 20 s LOW_CLOCK instant threshold), 0 timeouts, even counting ungoverned overhead (determinize /
+session-init / `_multi_pick`). The proportional throttle (≤10% of remaining, instant below 20 s)
+provably prevents clock overrun. **v5 is timeout-safe — ready to submit.**
