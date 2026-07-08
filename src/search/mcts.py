@@ -38,8 +38,14 @@ C_PUCT = 1.5
 _MAX_FORCED = 64           # guard on the forced/multi auto-resolution loop
 
 
-def _value(state: Any, root_player: int, ci: Mapping, ai: Mapping) -> float:
-    """Leaf value in (-1, 1) from the ROOT player's perspective."""
+def _value(state: Any, root_player: int, ci: Mapping, ai: Mapping,
+           value_fn: Optional[Callable] = None) -> float:
+    """Leaf value in (-1, 1) from the ROOT player's perspective.
+
+    Terminal states are scored exactly (±1 win/loss, 0 draw). For non-terminal leaves the score
+    comes from `value_fn(state, root_player)` when provided (the neural value head — already
+    root-perspective, in (-1, 1)); otherwise the default heuristic evaluator is used.
+    """
     obs = state.observation
     cur = getattr(obs, "current", None)
     if cur is None:
@@ -48,6 +54,8 @@ def _value(state: Any, root_player: int, ci: Mapping, ai: Mapping) -> float:
         if cur.result == root_player:
             return 1.0
         return -1.0 if cur.result in (0, 1) else 0.0
+    if value_fn is not None:
+        return value_fn(state, root_player)
     gs = build_game_state(obs, ci)
     s = evaluate(gs, card_index=ci, attack_index=ai).score
     if getattr(cur, "yourIndex", root_player) != root_player:
@@ -112,13 +120,14 @@ def _advance_forced(state: Any, ci: Mapping, ai: Mapping) -> Any:
 
 
 class _Node:
-    def __init__(self, state: Any, root_player: int, ci: Mapping, ai: Mapping):
+    def __init__(self, state: Any, root_player: int, ci: Mapping, ai: Mapping,
+                 value_fn: Optional[Callable] = None):
         self.state = state
         obs = state.observation
         cur = getattr(obs, "current", None)
         sel = getattr(obs, "select", None)
         self.terminal = cur is None or getattr(cur, "result", -1) != -1 or sel is None
-        self.value = _value(state, root_player, ci, ai)
+        self.value = _value(state, root_player, ci, ai, value_fn)
         if self.terminal:
             self.actions: list[int] = []
             self.is_our_turn = True
@@ -153,14 +162,16 @@ def _select(node: "_Node", c_puct: float) -> int:
     return best_a
 
 
-def _step_child(node: "_Node", a: int, root_player: int, ci: Mapping, ai: Mapping) -> "_Node":
+def _step_child(node: "_Node", a: int, root_player: int, ci: Mapping, ai: Mapping,
+                value_fn: Optional[Callable] = None) -> "_Node":
     pick = [] if a == _PASS else [a]
     child_state = _advance_forced(search_step(node.state.searchId, pick), ci, ai)
-    return _Node(child_state, root_player, ci, ai)
+    return _Node(child_state, root_player, ci, ai, value_fn)
 
 
 def _simulate(root: "_Node", root_player: int, c_puct: float,
-              prior_fn: Callable, ci: Mapping, ai: Mapping) -> None:
+              prior_fn: Callable, ci: Mapping, ai: Mapping,
+              value_fn: Optional[Callable] = None) -> None:
     node = root
     path: list[tuple[_Node, int]] = []
     while True:
@@ -175,7 +186,7 @@ def _simulate(root: "_Node", root_player: int, c_puct: float,
             node = node.children[a]
             continue
         try:
-            child = _step_child(node, a, root_player, ci, ai)
+            child = _step_child(node, a, root_player, ci, ai, value_fn)
         except Exception:
             value = node.value  # illegal/edge: fall back to this node's estimate
             break
@@ -189,12 +200,18 @@ def _simulate(root: "_Node", root_player: int, c_puct: float,
 
 def search(obs: Any, worlds: Sequence[tuple], card_index: Mapping, attack_index: Mapping, *,
            sims: int = 800, c_puct: float = C_PUCT, prior_fn: Callable = uniform_prior,
+           value_fn: Optional[Callable] = None,
            deadline: Optional[float] = None) -> tuple[Optional[list[int]], dict]:
     """Run determinized MCTS over the K `worlds` and return (pick, stats). `pick` is the engine
     select list for the root decision (a single option index, or [] for pass). Aggregates root
-    visit counts across worlds and returns the most-visited (robust) action."""
+    visit counts across worlds and returns the most-visited (robust) action.
+
+    `prior_fn(node) -> {action: prob}` and `value_fn(state, root_player) -> (-1,1)` are the network
+    hooks; both default to the heuristic (uniform priors + evaluator leaf), so plain MCTS-H is the
+    no-argument behaviour."""
     root_player = obs.current.yourIndex
-    roots = [_Node(search_begin(obs, *w), root_player, card_index, attack_index) for w in worlds]
+    roots = [_Node(search_begin(obs, *w), root_player, card_index, attack_index, value_fn)
+             for w in worlds]
     try:
         done = 0
         for i in range(sims):
@@ -203,7 +220,7 @@ def search(obs: Any, worlds: Sequence[tuple], card_index: Mapping, attack_index:
             root = roots[i % len(roots)]
             if root.terminal or not root.actions:
                 continue
-            _simulate(root, root_player, c_puct, prior_fn, card_index, attack_index)
+            _simulate(root, root_player, c_puct, prior_fn, card_index, attack_index, value_fn)
             done += 1
 
         agg_N: Counter = Counter()

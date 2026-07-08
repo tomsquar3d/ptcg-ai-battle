@@ -1061,3 +1061,34 @@ contract on any legal state.
   `_value` with the net's tanh value; small refactor), then **round_robin acceptance gate** (net-MCTS
   vs plain v4 MCTS — the real test: does the learned prior/value beat the heuristic teacher?).
 - ONNX-CPU export for deploy once a net passes the gate.
+
+---
+
+## #28 — Net wired into MCTS as prior + leaf value (`src/nn/guide.py`, `search/mcts.py` refactor)
+
+**Date:** 2026-07-07
+**Code:** `src/search/mcts.py` (injectable `value_fn`), `src/nn/guide.py`, `scripts/net_mcts_smoke.py`
+
+The AlphaZero payoff wiring — the learned policy focuses the search and the learned value replaces
+the heuristic evaluator at the leaves. `mcts.search` grew an optional `value_fn(state, root_player)
+-> (-1,1)` threaded through `_value`/`_Node`/`_step_child`/`_simulate` (the `prior_fn` hook already
+existed); **both default to the heuristic**, so plain MCTS-H (v4, recorder) is unchanged and
+backward-compatible. `NetGuide` loads a checkpoint and implements both hooks from one net: `priors`
+from the pointer head (softmax over legal options; PASS / >64-option get a small exploratory floor
+since the head doesn't model them), `value` from the value head with the acting→root perspective flip
+(matches how `z` was labelled). Forced/multi picks stay on the cheap heuristic.
+
+**Validated** (`net_mcts_smoke.py`, 5 real branch decisions): net-guided search returns legal picks
+with reported root visits, value ∈ (−1,1), and the heuristic default-arg path still works. Correctness
+proven — NOT strength. Caveat: at the sampled early decision `max|prior−uniform| = 0.011` (soft
+policy) — expected from the 120-game model; the prior will sharpen with a bigger buffer. **This is why
+the buffer must grow before the acceptance gate is meaningful.**
+
+Perf note (optimize later, not now): `value` and `priors` each run a net forward, so an expanded node
+costs ~2 forwards; batching leaves / caching per-state would cut this. Fine for the gate at low sims.
+
+### Next
+- Bigger buffer (few thousand games) + retrain → **round_robin acceptance gate**: net-MCTS vs plain
+  v4. The make-or-break test — does the learned prior/value beat the heuristic teacher?
+- If it passes: flywheel + ONNX-CPU export. If not: diagnose (more data / sharper policy target / net
+  capacity) before any cloud spend.
