@@ -1140,3 +1140,41 @@ output files instead.)
   validate in cabt (all DONE, move-time under clock), submit → own ladder μ.
 - Flywheel: this net → stronger self-play → bigger buffer → retrain → re-gate. GPU worth it once CPU
   training >30–60 min (~10k+ games); many-core CPU box helps the self-play bottleneck more.
+
+---
+
+## #30 — ONNX-CPU export + equal-wall-clock re-gate = **PASS (ships)** (`scripts/export_onnx.py`, `src/nn/onnx_guide.py`)
+
+**Date:** 2026-07-08
+**Code:** `scripts/export_onnx.py`, `src/nn/onnx_guide.py`, `scripts/gate_net_vs_heuristic.py` (+`--onnx`/`--budget`); `encode_state` pad-fix made branch-free
+
+The deploy path. `PTCGNet` → **two self-contained ONNX graphs**: `value.onnx` (state→value, the hot
+leaf path — 1.89 MB) and `policy.onnx` (state+options→raw logits, masked in numpy — 2.01 MB). Only
+the batch dim is dynamic (batch=1 confirmed — MCTS calls one state at a time). Validated vs torch at
+**fp32 precision** (value Δ 1.2e-7, logit Δ 1.3e-7) on real states + the padded-board NaN guard.
+Gotchas handled: torch≥2.x dynamo exporter needs `onnxscript`; it writes weights to a `.onnx.data`
+sidecar → re-saved inline so a single file ships; the `all_pad` NaN guard was rewritten branch-free
+(tracing bakes out `if`s). `OnnxGuide` = `NetGuide`'s twin over single-threaded `onnxruntime` (no
+torch in the deployed agent).
+
+**Equal-SIMS gate (#29 recap):** net 70.5%. **Equal-WALL-CLOCK re-gate (the deploy test), 0.4s/move
+(governor routine budget), 200 games, ONNX net vs heuristic, seats alternated:**
+```
+  avg sims/move: net 8926  heuristic 7846
+  net W/L/D = 117/83  ->  58.5% +/- 3.5%   z=+2.40  ->  PASS
+```
+The edge shrinks 70.5%→58.5% under a clock (the net pays for its forwards) but stays net-positive and
+significant. Amortization is why it's not worse: MCTS caches priors/value per node, so forwards are
+paid on expansion, not every sim → net gets ~90% of heuristic's sim count (8.9k vs 7.8k), not ~25%.
+Consistent across workers (6/8 ≥56%). z=+2.40 is *just* past significance at N=200 — real but modest;
+a stronger net (flywheel) should widen it.
+
+**Deps:** onnx, onnxscript, onnxruntime added to `requirements-train.txt`; **onnxruntime is the ONLY
+nn dep the shipped agent needs** (torch stays dev-only).
+
+### Next
+- **Bundle the submission**: new `submissions/vN/` = `main.py` (ONNX MCTS-H agent, single-threaded,
+  watchdog) + `value.onnx` + `policy.onnx` + `deck.csv` + vendored `src/{ptcg,search,nn(features+
+  onnx_guide)}`. Validate in cabt (all DONE/DONE, move-time under clock, no torch import), submit.
+- Higher-budget spot check (5s critical) + bigger-N re-gate to tighten 58.5%.
+- Flywheel: this net → self-play → retrain → re-gate (each gen should widen the edge).
