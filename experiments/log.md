@@ -1395,3 +1395,33 @@ defaulted to zero (backward compatible). `record_mixed.py --benchmark` covers it
 
 **Deferred to phase 5 (with the v2 net):** the encoder's auxiliary heads + the aux MSE loss terms —
 they need the new v2 architecture (deck-conditioning inputs + aux heads), which is built at train time.
+
+## #38 — Phase 5(a): v2 net architecture (deck-conditioning + aux heads) + trainer (`encoder.py`, `train_net.py`)
+
+**Date:** 2026-07-08 · **Plan:** docs §3d step 5 (part a). Built + unit-tested the v2 network and
+training loop before committing compute to a real buffer (part b generates it; part c trains+gates).
+
+**Architecture (all gated behind `NetConfig` flags → v1 default byte-identical, 496,962 params).**
+`deck_cond=True`: fold the own-deck summary (28-d → `deck_mlp`) + `archetype_id` (`arch_embed`,
+vocab 16) into the state vector. `aux_heads=True`: two training-only heads off the state vector —
+`prize_head`→tanh (prize_diff_t3), `tta_head`→sigmoid (turns_to_attack). New `forward_train` returns
+(logits, value, aux); **inference `forward` is unchanged** (aux heads never touched at play time, so
+MCTS/guide/ONNX see the same value+policy interface). v2 = **577,540 params** (~2.3 MB).
+
+**Trainer (`train_net.py`) — v1 path unchanged when flags off.** New flags `--deck-cond` / `--aux-heads`
+/ `--aux-weight` (0.5) / `--bc-epochs`. Loss = policy CE + value MSE + aux_weight·(prize+tta MSE).
+`--bc-epochs` runs a policy-CE-only warmup over the `SOURCE_BC` (scripted-expert) rows first
+(behavioral cloning, §3d step 5), then standard AlphaZero training on the full mixed buffer. Batches
+merge `deck_cond_batch` keys; `aux_targets` supply the aux MSE targets.
+
+**Unit-tested (small 4-shard mixed buffer + synthetic):** v1 arch unchanged (496,962); v2
+forward==forward_train in eval; aux outputs finite + in range; grads flow to `deck_mlp`/`arch_embed`/
+aux heads; v2 training loop decreases train CE (1.559→1.549), value MSE (0.95→0.30), aux MSE
+(0.46→0.08), no NaN; BC warmup executes over the 34 expert rows (policy CE only); **v1 default
+training still runs unchanged**. Durable check added to `encoder_smoke.py` (`5. SCHEMA-v2 …`).
+(Val metrics meaningless at 3-game train — this validates loop mechanics; real learning waits on the
+part-b buffer.)
+
+**Deferred to 5(c):** wiring the v2 net into MCTS for the gate needs the guide to pass the piloted
+deck's `deck_summary`+`archetype_id` into `encode_state` (deck context) — will use the torch `NetGuide`
+for the gate (skip a v2 ONNX export until it ships). Part b (real mixed-buffer generation) launching now.

@@ -36,6 +36,11 @@ class NetConfig:
     state_dim: int = 256
     n_heads: int = 4
     dropout: float = 0.1
+    # --- schema-v2 extensions (docs §3d); all default OFF → byte-identical to the shipped v5 arch ---
+    deck_cond: bool = False      # fold own-deck summary + archetype embedding into the state vector
+    aux_heads: bool = False      # add prize-diff@t+3 + turns-to-first-attack auxiliary value heads
+    deck_dim: int = 32           # deck_summary MLP width
+    arch_dim: int = 16           # archetype embedding width
 
 
 class _AttnPool(nn.Module):
@@ -69,8 +74,17 @@ class PTCGNet(nn.Module):
         self.global_mlp = nn.Sequential(
             nn.Linear(F.GLOBAL_DIM, cfg.g_dim), nn.ReLU(), nn.Linear(cfg.g_dim, cfg.g_dim), nn.ReLU())
 
+        # schema-v2 deck conditioning: own-deck summary MLP + archetype embedding → widen state input
+        state_in = cfg.d_model * 2 + cfg.embed_dim + cfg.g_dim
+        if cfg.deck_cond:
+            self.deck_mlp = nn.Sequential(
+                nn.Linear(F.DECK_SUMMARY_DIM, cfg.deck_dim), nn.ReLU(),
+                nn.Linear(cfg.deck_dim, cfg.deck_dim), nn.ReLU())
+            self.arch_embed = nn.Embedding(F.ARCHETYPE_VOCAB, cfg.arch_dim)
+            state_in += cfg.deck_dim + cfg.arch_dim
+
         self.state_mlp = nn.Sequential(
-            nn.Linear(cfg.d_model * 2 + cfg.embed_dim + cfg.g_dim, cfg.state_dim), nn.ReLU(),
+            nn.Linear(state_in, cfg.state_dim), nn.ReLU(),
             nn.Linear(cfg.state_dim, cfg.state_dim), nn.ReLU())
 
         self.opt_in = nn.Linear(cfg.embed_dim + F.OPTION_SCALAR_DIM, cfg.d_model)
@@ -79,6 +93,12 @@ class PTCGNet(nn.Module):
             nn.Linear(cfg.d_model, 1))
         self.value_head = nn.Sequential(
             nn.Linear(cfg.state_dim, cfg.d_model), nn.ReLU(), nn.Linear(cfg.d_model, 1))
+        # auxiliary value heads (training-only; inference reads only value_head/policy_scorer)
+        if cfg.aux_heads:
+            self.prize_head = nn.Sequential(
+                nn.Linear(cfg.state_dim, cfg.d_model), nn.ReLU(), nn.Linear(cfg.d_model, 1))
+            self.tta_head = nn.Sequential(
+                nn.Linear(cfg.state_dim, cfg.d_model), nn.ReLU(), nn.Linear(cfg.d_model, 1))
 
     def encode_state(self, b: dict) -> torch.Tensor:
         pk = torch.cat([self.card_embed(b["pokemon_ids"]), b["pokemon_scalars"]], dim=-1)
@@ -99,16 +119,35 @@ class PTCGNet(nn.Module):
 
         stad = self.card_embed(b["stadium_id"])                     # [B,embed]
         glob = self.global_mlp(b["globals"])                        # [B,g]
-        return self.state_mlp(torch.cat([board, hand, stad, glob], dim=-1))  # [B,state]
+        parts = [board, hand, stad, glob]
+        if self.cfg.deck_cond:                                      # schema-v2 deck conditioning
+            parts.append(self.deck_mlp(b["deck_summary"]))          # [B,deck_dim]
+            parts.append(self.arch_embed(b["archetype_id"]))        # [B,arch_dim]
+        return self.state_mlp(torch.cat(parts, dim=-1))            # [B,state]
 
-    def forward(self, b: dict) -> tuple[torch.Tensor, torch.Tensor]:
-        state = self.encode_state(b)                               # [B,state]
+    def _policy(self, state: torch.Tensor, b: dict) -> torch.Tensor:
         opt = self.opt_in(torch.cat([self.card_embed(b["option_card_ids"]), b["option_scalars"]], -1))
         st = state.unsqueeze(1).expand(-1, opt.shape[1], -1)       # [B,O,state]
         logits = self.policy_scorer(torch.cat([opt, st], -1)).squeeze(-1)   # [B,O]
-        logits = logits.masked_fill(~b["option_mask"], float("-inf"))
+        return logits.masked_fill(~b["option_mask"], float("-inf"))
+
+    def forward(self, b: dict) -> tuple[torch.Tensor, torch.Tensor]:
+        state = self.encode_state(b)                               # [B,state]
+        logits = self._policy(state, b)
         value = torch.tanh(self.value_head(state)).squeeze(-1)     # [B]
         return logits, value
+
+    def forward_train(self, b: dict) -> tuple[torch.Tensor, torch.Tensor, dict]:
+        """Training forward: (policy logits, value, aux). `aux` carries the schema-v2 auxiliary heads
+        (empty dict when `cfg.aux_heads` is off). Inference uses `forward` and never touches aux."""
+        state = self.encode_state(b)
+        logits = self._policy(state, b)
+        value = torch.tanh(self.value_head(state)).squeeze(-1)
+        aux = {}
+        if self.cfg.aux_heads:
+            aux["prize_diff_t3"] = torch.tanh(self.prize_head(state)).squeeze(-1)      # [B] ∈ (-1,1)
+            aux["turns_to_attack"] = torch.sigmoid(self.tta_head(state)).squeeze(-1)   # [B] ∈ (0,1)
+        return logits, value, aux
 
     def num_params(self) -> int:
         return sum(p.numel() for p in self.parameters())

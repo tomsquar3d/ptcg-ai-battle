@@ -91,11 +91,27 @@ def main() -> int:
     assert torch.isfinite(ev).all() and torch.isfinite(el[empty["option_mask"]]).all(), \
         "fully-padded board produced NaN"
 
+    # 5. schema-v2 net (docs §3d): deck-conditioning + aux heads forward/backprop; v1 arch unchanged.
+    from nn.encoder import NetConfig                                  # noqa: E402
+    from nn import features as _F                                     # noqa: E402
+    assert PTCGNet(NetConfig()).num_params() == 496962, "v1 arch changed — v5 ONNX depends on it!"
+    v2 = PTCGNet(NetConfig(deck_cond=True, aux_heads=True))
+    b2 = collate(states[:4], actions[:4])
+    b2["deck_summary"] = torch.rand(4, _F.DECK_SUMMARY_DIM)
+    b2["archetype_id"] = torch.randint(0, _F.ARCHETYPE_VOCAB, (4,))
+    lg2, val2, aux2 = v2.forward_train(b2)
+    assert set(aux2) == {"prize_diff_t3", "turns_to_attack"}
+    assert torch.all(aux2["prize_diff_t3"].abs() <= 1) and torch.all((0 <= aux2["turns_to_attack"]) & (aux2["turns_to_attack"] <= 1))
+    (val2.sum() + aux2["prize_diff_t3"].sum() + aux2["turns_to_attack"].sum()).backward()
+    assert v2.arch_embed.weight.grad is not None and v2.prize_head[0].weight.grad is not None
+
     print(f"1. FORWARD  : logits {tuple(logits.shape)}, value {tuple(value.shape)}; "
           f"legal finite, padding −inf, policy normalized, value∈(−1,1)")
     print(f"2. BACKWARD : loss {loss.item():.3f}, grad-norm {gnorm.item():.2f} (finite)")
     print(f"3. SIZE     : {net.num_params():,} params (~{net.num_params()*4/1e6:.1f} MB fp32) — ONNX-CPU-friendly")
     print("4. NAN-GUARD: fully-padded board → finite logits + value")
+    print(f"5. SCHEMA-v2: deck-cond+aux net {v2.num_params():,} params, aux heads finite+in-range, "
+          f"grads flow; v1 arch unchanged (496,962)")
     print("\nOK: encoder + policy/value heads forward, mask, and backprop correctly.")
     return 0
 

@@ -39,17 +39,36 @@ def policy_ce(logits: torch.Tensor, pi: torch.Tensor) -> torch.Tensor:
     return -(torch.where(pi > 0, pi * logp, torch.zeros_like(logp))).sum(1).mean()
 
 
+def make_batch(buf: D.Buffer, idx: np.ndarray, device: str, deck_cond: bool):
+    """v1 batch, plus schema-v2 deck-conditioning keys merged in when the net wants them."""
+    bd, pi, z = D.make_batch(buf, idx, device)
+    if deck_cond:
+        ds, aid = D.deck_cond_batch(buf, idx, device)
+        bd["deck_summary"] = ds
+        bd["archetype_id"] = aid
+    return bd, pi, z
+
+
+def aux_loss(aux: dict, tgt: dict) -> torch.Tensor:
+    """MSE of the auxiliary heads against their targets (docs §3d step 4)."""
+    mse = torch.nn.functional.mse_loss
+    return mse(aux["prize_diff_t3"], tgt["prize_diff_t3"]) + mse(aux["turns_to_attack"], tgt["turns_to_attack"])
+
+
 @torch.no_grad()
-def evaluate(net: PTCGNet, buf: D.Buffer, idx: np.ndarray, batch: int, device: str) -> dict:
+def evaluate(net: PTCGNet, buf: D.Buffer, idx: np.ndarray, batch: int, device: str,
+             deck_cond: bool, aux_heads: bool) -> dict:
     net.eval()
-    tot_ce = tot_mse = 0.0
+    tot_ce = tot_mse = tot_aux = 0.0
     n = top1_hits = top1_n = sign_hits = 0
     for s in range(0, len(idx), batch):
         b = idx[s:s + batch]
-        bd, pi, z = D.make_batch(buf, b, device)
-        logits, value = net(bd)
+        bd, pi, z = make_batch(buf, b, device, deck_cond)
+        logits, value, aux = net.forward_train(bd)
         tot_ce += policy_ce(logits, pi).item() * len(b)
         tot_mse += torch.nn.functional.mse_loss(value, z).item() * len(b)
+        if aux_heads:
+            tot_aux += aux_loss(aux, D.aux_targets(buf, b, device)).item() * len(b)
         n += len(b)
         has_tgt = pi.sum(1) > 0
         if has_tgt.any():
@@ -63,6 +82,7 @@ def evaluate(net: PTCGNet, buf: D.Buffer, idx: np.ndarray, batch: int, device: s
     return {
         "policy_ce": tot_ce / max(n, 1),
         "value_mse": tot_mse / max(n, 1),
+        "aux_mse": tot_aux / max(n, 1),
         "policy_top1": top1_hits / max(top1_n, 1),
         "value_sign_acc": sign_hits / max(n, 1),
     }
@@ -79,6 +99,12 @@ def main() -> int:
     ap.add_argument("--value-weight", type=float, default=1.0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=os.path.join(REPO, "experiments", "checkpoints", "net.pt"))
+    # schema-v2 (docs §3d): deck-conditioned inputs, aux heads, and a BC-pretrain warmup
+    ap.add_argument("--deck-cond", action="store_true", help="v2: feed deck_summary + archetype_id")
+    ap.add_argument("--aux-heads", action="store_true", help="v2: train prize/turns-to-attack aux heads")
+    ap.add_argument("--aux-weight", type=float, default=0.5)
+    ap.add_argument("--bc-epochs", type=int, default=0,
+                    help="v2: policy-only BC warmup epochs over SOURCE_BC (expert) rows before main training")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -90,14 +116,42 @@ def main() -> int:
           f"| train {len(tr)} / val {len(va)} | dropped PASS mass {buf.dropped_pass_mass:.2%}")
     if buf.dropped_pass_mass > 0.05:
         print(f"  NOTE: {buf.dropped_pass_mass:.1%} of visit mass was PASS (dropped) — consider a PASS logit")
+    if args.deck_cond and not D.has_deck_cond(buf):
+        print("  WARN: --deck-cond set but buffer has no deck_summary (defaults to zeros)")
+    if args.aux_heads and not D.has_aux(buf):
+        print("  WARN: --aux-heads set but buffer has no aux targets (defaults to zeros)")
 
-    net = PTCGNet(NetConfig()).to(device)
+    cfg = NetConfig(deck_cond=args.deck_cond, aux_heads=args.aux_heads)
+    net = PTCGNet(cfg).to(device)
+    print(f"net: {net.num_params():,} params | deck_cond={cfg.deck_cond} aux_heads={cfg.aux_heads}")
     opt = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     rng = np.random.default_rng(args.seed)
 
-    base = evaluate(net, buf, va, args.batch, device)
+    base = evaluate(net, buf, va, args.batch, device, cfg.deck_cond, cfg.aux_heads)
     print(f"init  val: CE {base['policy_ce']:.3f}  MSE {base['value_mse']:.3f}  "
           f"top1 {base['policy_top1']:.1%}  sign {base['value_sign_acc']:.1%}")
+
+    # --- BC pretrain: policy-only CE over expert (SOURCE_BC) rows (docs §3d step 5) -------------
+    if args.bc_epochs > 0:
+        src = buf.data.get("source")
+        bc = tr[src[tr] == 1] if src is not None else np.array([], dtype=int)
+        if len(bc) == 0:
+            print("BC pretrain: no SOURCE_BC rows in train split — skipped")
+        else:
+            print(f"BC pretrain: {len(bc)} expert rows, {args.bc_epochs} epochs (policy CE only)")
+            for ep in range(1, args.bc_epochs + 1):
+                net.train()
+                order = bc.copy(); rng.shuffle(order); run = 0.0
+                for s in range(0, len(order), args.batch):
+                    b = order[s:s + args.batch]
+                    bd, pi, _z = make_batch(buf, b, device, cfg.deck_cond)
+                    logits, _v, _a = net.forward_train(bd)
+                    ce = policy_ce(logits, pi)
+                    opt.zero_grad(); ce.backward()
+                    torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0); opt.step()
+                    run += ce.item() * len(b)
+                m = evaluate(net, buf, va, args.batch, device, cfg.deck_cond, cfg.aux_heads)
+                print(f"  bc ep {ep:2d}  train CE {run/len(bc):.3f}  |  val top1 {m['policy_top1']:.1%}")
 
     best = -1.0
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
@@ -105,33 +159,39 @@ def main() -> int:
         net.train()
         order = tr.copy()
         rng.shuffle(order)
-        run_ce = run_mse = 0.0
+        run_ce = run_mse = run_aux = 0.0
         for s in range(0, len(order), args.batch):
             b = order[s:s + args.batch]
-            bd, pi, z = D.make_batch(buf, b, device)
-            logits, value = net(bd)
+            bd, pi, z = make_batch(buf, b, device, cfg.deck_cond)
+            logits, value, aux = net.forward_train(bd)
             ce = policy_ce(logits, pi)
             mse = torch.nn.functional.mse_loss(value, z)
             loss = ce + args.value_weight * mse
+            if cfg.aux_heads:
+                al = aux_loss(aux, D.aux_targets(buf, b, device))
+                loss = loss + args.aux_weight * al
+                run_aux += al.item() * len(b)
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0)
             opt.step()
             run_ce += ce.item() * len(b)
             run_mse += mse.item() * len(b)
-        m = evaluate(net, buf, va, args.batch, device)
+        m = evaluate(net, buf, va, args.batch, device, cfg.deck_cond, cfg.aux_heads)
         star = ""
         if m["policy_top1"] > best:
             best = m["policy_top1"]
-            torch.save({"model": net.state_dict(), "config": vars(NetConfig()),
+            torch.save({"model": net.state_dict(), "config": vars(cfg),
                         "val": m, "epoch": ep}, args.out)
             star = " *"
-        print(f"ep {ep:3d}  train CE {run_ce/len(tr):.3f} MSE {run_mse/len(tr):.3f}  |  "
+        aux_str = f" aux {run_aux/len(tr):.3f}/{m['aux_mse']:.3f}" if cfg.aux_heads else ""
+        print(f"ep {ep:3d}  train CE {run_ce/len(tr):.3f} MSE {run_mse/len(tr):.3f}{aux_str}  |  "
               f"val CE {m['policy_ce']:.3f} MSE {m['value_mse']:.3f} "
               f"top1 {m['policy_top1']:.1%} sign {m['value_sign_acc']:.1%}{star}")
 
     meta = {"buffer": os.path.relpath(args.buffer, REPO), "games": buf.n_games,
             "decisions": int(len(buf.game_id)), "epochs": args.epochs,
+            "deck_cond": cfg.deck_cond, "aux_heads": cfg.aux_heads,
             "best_val_top1": best, "dropped_pass_mass": buf.dropped_pass_mass}
     with open(os.path.splitext(args.out)[0] + ".meta.json", "w") as fh:
         json.dump(meta, fh, indent=2)
