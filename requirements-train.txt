@@ -9,5 +9,6 @@
 
 numpy>=1.24
 torch>=2.0            # CPU build locally; CUDA build on the training GPU
-# onnx>=1.15         # add when wiring ONNX export
-# onnxruntime>=1.17  # CPU inference in the deployed agent
+onnx>=1.15           # ONNX export (scripts/export_onnx.py)
+onnxscript>=0.7      # required by torch>=2.x dynamo-based onnx exporter
+onnxruntime>=1.17    # CPU inference — the ONLY nn dep the deployed agent needs (no torch shipped)

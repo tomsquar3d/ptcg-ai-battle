@@ -74,15 +74,18 @@ def _multi_pick(obs, my_index, deck, ci, ai, tracker):
         search_end()
 
 
-def play_game(deck, ci, ai, guide, net_seat, sims, k, move_cap=12.0):
-    """Play one game; net_seat uses the net pilot, the other uses heuristic MCTS. Return winner idx
-    (0/1) or -1, plus (net_decisions, heur_decisions) counts."""
+def play_game(deck, ci, ai, guide, net_seat, sims, k, move_cap=12.0, budget=None):
+    """Play one game; net_seat uses the net pilot, the other uses heuristic MCTS. `budget` (seconds)
+    switches to equal-WALL-CLOCK mode: both pilots search to a deadline (fixed sims otherwise). Return
+    winner idx (0/1) or -1, plus a stats dict (decisions + sims each side)."""
     trackers = {0: OpponentTracker(), 1: OpponentTracker()}
     result = -1
     nd = hd = 0
+    ns = hs = 0                          # total sims each side (to expose the net's speed cost)
+    MAX_SIMS = 100_000
     obs_dict, _ = battle_start(deck, list(deck))
     if obs_dict is None:
-        return -1, (0, 0)
+        return -1, {"nd": 0, "hd": 0, "ns": 0, "hs": 0}
     try:
         for _ in range(6000):
             obs = to_observation_class(obs_dict)
@@ -111,14 +114,15 @@ def play_game(deck, ci, ai, guide, net_seat, sims, k, move_cap=12.0):
                 pick = None
                 try:
                     worlds = determinize(obs, deck, ci, k=k, opp_tracker=trackers[mi])
-                    deadline = time.monotonic() + move_cap
+                    n_sims = MAX_SIMS if budget else sims
+                    deadline = time.monotonic() + (budget if budget else move_cap)
                     if mi == net_seat:
-                        pick, _ = mcts.search(obs, worlds, ci, ai, sims=sims, deadline=deadline,
-                                              prior_fn=guide.priors, value_fn=guide.value)
-                        nd += 1
+                        pick, st = mcts.search(obs, worlds, ci, ai, sims=n_sims, deadline=deadline,
+                                               prior_fn=guide.priors, value_fn=guide.value)
+                        nd += 1; ns += st.get("sims", 0)
                     else:
-                        pick, _ = mcts.search(obs, worlds, ci, ai, sims=sims, deadline=deadline)
-                        hd += 1
+                        pick, st = mcts.search(obs, worlds, ci, ai, sims=n_sims, deadline=deadline)
+                        hd += 1; hs += st.get("sims", 0)
                 except Exception:
                     pick = None
                 if pick is None:
@@ -126,7 +130,7 @@ def play_game(deck, ci, ai, guide, net_seat, sims, k, move_cap=12.0):
             obs_dict = battle_select(pick)
     finally:
         battle_finish()
-    return result, (nd, hd)
+    return result, {"nd": nd, "hd": hd, "ns": ns, "hs": hs}
 
 
 def main() -> int:
@@ -138,26 +142,34 @@ def main() -> int:
     ap.add_argument("--deck", default=os.path.join(REPO, "submissions", "v4", "deck.csv"))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--onnx", default=None, help="dir with value.onnx/policy.onnx (use OnnxGuide)")
+    ap.add_argument("--budget", type=float, default=None,
+                    help="seconds/move — equal-WALL-CLOCK mode (both pilots search to a deadline)")
     ap.add_argument("--benchmark", action="store_true")
     args = ap.parse_args()
 
-    # Parallelism here comes from running many of these processes at once; each must be single-
-    # threaded or torch's default intra-op pool (one thread per core, per process) oversubscribes
-    # the machine and collapses throughput. (Also the deploy contract: 2 vCPU, few threads.)
+    # Single-threaded: parallelism comes from many processes, and for a net this small intra-op
+    # threads are pure overhead (also the deploy contract: 2 vCPU).
     import torch
     torch.set_num_threads(1)
 
     ci = {c.cardId: c for c in all_card_data()}
     ai = {a.attackId: a for a in all_attack()}
     deck = _read_deck(args.deck)
-    guide = NetGuide(args.ckpt, ci, ai)
+    if args.onnx:
+        from nn.onnx_guide import OnnxGuide
+        guide = OnnxGuide(args.onnx, ci, ai)
+    else:
+        guide = NetGuide(args.ckpt, ci, ai)
 
     games = 2 if args.benchmark else args.games
     net_w = net_l = draw = 0
+    ns = hs = nd = hd = 0
     t0 = time.monotonic()
     for g in range(games):
         net_seat = (args.seed + g) % 2                    # alternate seats
-        winner, (nd, hd) = play_game(deck, ci, ai, guide, net_seat, args.sims, args.k)
+        winner, s = play_game(deck, ci, ai, guide, net_seat, args.sims, args.k, budget=args.budget)
+        ns += s["ns"]; hs += s["hs"]; nd += s["nd"]; hd += s["hd"]
         if winner == net_seat:
             net_w += 1
         elif winner in (0, 1):
@@ -167,20 +179,24 @@ def main() -> int:
         if args.benchmark:
             dt = time.monotonic() - t0
             print(f"game {g}: winner={winner} net_seat={net_seat} "
-                  f"(net {nd} / heur {hd} decisions)  cum {dt:.1f}s")
+                  f"(net {s['nd']}d/{s['ns']}sims  heur {s['hd']}d/{s['hs']}sims)  cum {dt:.1f}s")
     dt = time.monotonic() - t0
 
     decided = net_w + net_l
     wr = net_w / decided if decided else 0.0
     se = (wr * (1 - wr) / decided) ** 0.5 if decided else 0.0
-    line = (f"net-MCTS vs heuristic-MCTS | sims={args.sims} k={args.k} | "
-            f"{games} games in {dt:.0f}s ({dt/games:.1f}s/game)\n"
-            f"  net W/L/D = {net_w}/{net_l}/{draw} | win rate {wr:.1%} ± {se:.1%} (of decided)")
-    print(line)
+    mode = f"budget={args.budget}s/move" if args.budget else f"sims={args.sims}"
+    net_spm = ns / nd if nd else 0
+    heur_spm = hs / hd if hd else 0
+    print(f"net-MCTS vs heuristic-MCTS | {mode} k={args.k} | {games} games in {dt:.0f}s "
+          f"({dt/games:.1f}s/game)\n"
+          f"  avg sims/move: net {net_spm:.0f}  heuristic {heur_spm:.0f}\n"
+          f"  net W/L/D = {net_w}/{net_l}/{draw} | win rate {wr:.1%} ± {se:.1%} (of decided)")
     if args.out:
         with open(args.out, "w") as fh:
             json.dump({"net_w": net_w, "net_l": net_l, "draw": draw, "games": games,
-                       "sims": args.sims, "k": args.k, "seconds": dt}, fh)
+                       "sims": args.sims, "budget": args.budget, "k": args.k, "seconds": dt,
+                       "net_spm": net_spm, "heur_spm": heur_spm}, fh)
     return 0
 
 

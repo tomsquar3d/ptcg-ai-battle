@@ -86,11 +86,11 @@ class PTCGNet(nn.Module):
         # A fully-padded board (no Pokémon either side — a degenerate setup state) would make the
         # transformer softmax over zero keys → NaN. Unmask slot 0 for those rows so attention is
         # defined; board_pool re-masks by pokemon_mask, so the fabricated token is never pooled in.
-        pad = ~b["pokemon_mask"]
-        all_pad = pad.all(dim=1)
-        if all_pad.any():
-            pad = pad.clone()
-            pad[all_pad, 0] = False
+        # Branch-free (no data-dependent `if`) so the guard survives ONNX tracing/export.
+        pad = ~b["pokemon_mask"]                               # [B,N] True = padded
+        all_pad = pad.all(dim=1, keepdim=True)                 # [B,1] row entirely padded
+        is_col0 = torch.arange(pad.shape[1], device=pad.device) == 0   # [N] True only at slot 0
+        pad = pad & ~(all_pad & is_col0.unsqueeze(0))          # unmask slot 0 on all-padded rows
         pk = self.pk_attn(pk, src_key_padding_mask=pad)
         board = self.board_pool(pk, b["pokemon_mask"])              # [B,d]
 
