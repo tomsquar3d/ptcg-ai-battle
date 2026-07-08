@@ -1092,3 +1092,51 @@ costs ~2 forwards; batching leaves / caching per-state would cut this. Fine for 
   v4. The make-or-break test — does the learned prior/value beat the heuristic teacher?
 - If it passes: flywheel + ONNX-CPU export. If not: diagnose (more data / sharper policy target / net
   capacity) before any cloud spend.
+
+---
+
+## #29 — 5k-game buffer, retrain, and the ACCEPTANCE GATE = **PASS** (`scripts/gate_net_vs_heuristic.py`)
+
+**Date:** 2026-07-07
+**Code:** `scripts/gate_net_vs_heuristic.py`; buffer `experiments/selfplay/buffer` (gitignored); `experiments/checkpoints/net.pt`
+
+**Buffer:** 5,004 self-play games / **118,191 decisions** (9 procs × 556, sims=256/k=2, no errors) —
+~42× the #27 smoke buffer. 37 MB on disk.
+
+**Retrain** (`train_net.py`, 15 epochs, batch 512, 10% held-out games):
+- **Value head fixed:** train MSE 0.69→0.53 and val MSE 0.61→0.58 now TRACK (no divergence) — the
+  #27 value overfit was pure small-data, gone at 42× scale.
+- **Value-sign acc 44%→~79%** (was ~64% at 120 games) — the value head calls the winner ~4/5 from
+  mid-game. Policy top-1 up to **76%**. Best checkpoint = ep10 (top1 76%, sign 79%).
+
+**THE GATE — net-guided MCTS vs plain heuristic MCTS, identical determinize+MCTS budget (only the
+prior+value source differs), seats alternated, 200 games, sims=128/k=2:**
+```
+  net W/L/D = 141/59/0
+  win rate  = 70.5% ± 3.2%   95% CI [64.2%, 76.8%]
+  z vs 50%  = +5.80  ->  PASS (net > heuristic)
+```
+Consistent across all 8 workers (52–80%, no outlier). **The ML path is real: the learned value/prior
+substantially out-search the hand-written evaluator.** This is the first agent improvement of the
+whole arc that came from a *learned* component rather than search structure.
+
+**Caveats (deploy-relevant, not yet tested):** the gate isolates quality *per simulation* at EQUAL
+sims. Under a fixed WALL-CLOCK the net's ~2 forwards/node means fewer sims per move — so the real
+deploy question is equal-time, which needs fast inference (**ONNX-CPU**). Also low sims (128) flatter
+a strong value head; a higher-sims spot check is worth doing.
+
+**BIG PERF LESSON (cost 1 hung 31-min run):** torch defaults to one intra-op thread *per core, per
+process*. 8 worker processes → ~80 threads on 10 cores, load 29, throughput collapsed (0 games in 31
+min). Fix: `torch.set_num_threads(1)` + `OMP/MKL/OPENBLAS_NUM_THREADS=1`; parallelism comes from the
+process count. Single-threaded was also **~8× faster per game** (3.3s vs 26.6s) — for a 2 MB net,
+torch threading is pure overhead. Ship the agent single-threaded too. (Also: never wait on
+`while pgrep -f X.py` — the watcher's own command line contains X.py and self-matches forever; gate on
+output files instead.)
+
+### Next
+- **ONNX-CPU export** of the net → wrap NetGuide's two calls as an ONNX session → re-gate at equal
+  WALL-CLOCK (the true deploy test) + a higher-sims spot check.
+- If it holds: bundle a submission (`main.py` + `net.onnx` + `deck.csv`, single-threaded, watchdog),
+  validate in cabt (all DONE, move-time under clock), submit → own ladder μ.
+- Flywheel: this net → stronger self-play → bigger buffer → retrain → re-gate. GPU worth it once CPU
+  training >30–60 min (~10k+ games); many-core CPU box helps the self-play bottleneck more.
