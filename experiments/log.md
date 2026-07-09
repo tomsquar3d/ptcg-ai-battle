@@ -1425,3 +1425,43 @@ part-b buffer.)
 **Deferred to 5(c):** wiring the v2 net into MCTS for the gate needs the guide to pass the piloted
 deck's `deck_summary`+`archetype_id` into `encode_state` (deck context) — will use the torch `NetGuide`
 for the gate (skip a v2 ONNX export until it ships). Part b (real mixed-buffer generation) launching now.
+
+## #39 — Phase 5(c): v2 net trained on the mixed buffer + preliminary gate vs v5 (`gate_v2_vs_v5.py`, `guide.py` deck-cond)
+
+**Date:** 2026-07-08 · **Plan:** docs §3d step 5 (parts b+c). Generated the real mixed buffer, trained
+the deck-conditioned v2 net, and gated it against the shipped v5 net.
+
+**Mixed buffer (part b).** 8 workers × 100 games = **800 games / 82,308 decisions** across the pool
+(sample+dragapult × heuristic/net/expert, all seat pairings). Composition: 57,903 MCTS-π + **24,405 BC**
+(30%) rows; **69,560 dragapult** vs 12,748 sample rows (the OOD deck now heavily represented, the point);
+dropped-PASS 1.7%. `experiments/selfplay/mixed/` (gitignored).
+
+**v2 training (part c).** `train_net.py --deck-cond --aux-heads --bc-epochs 3 --epochs 12 --aux-weight
+0.5` → `net_v2.pt` (v5's `net.pt` untouched). Val **top1 58.3%**, **sign 71.7%**, aux MSE prize 0.086 /
+tta 0.127. (Lower top1 than v5's 76% is expected — a far more diverse target: 3 pilots × 2 decks + BC.)
+
+**Gate wiring.** `NetGuide` extended with `set_deck(deck, archetype)` → injects `deck_summary` +
+`archetype_id` into every state/priors batch (no-op for v1 nets, so v5 NetGuide unaffected).
+`gate_v2_vs_v5.py`: mirror, same deck both seats, seat A = v2 NetGuide (deck-conditioned, torch),
+seat B = v5 OnnxGuide, identical determinize+MCTS budget, seats alternated.
+
+**Preliminary gate result (LOW POWER — see caveat):**
+```
+  dragapult-dusknoir:  v2 13/11 = 54.2% ±10.2%  z=+0.41   (criterion a: improve → INCONCLUSIVE)
+  sample:              v2 13/11 = 54.2% ±10.2%  z=+0.41   (criterion b: no-regress → PASS)
+```
+So v2 does **not regress on sample** and is **directionally ahead on dragapult** but not materially/
+significantly so.
+
+**Caveat — the gate is underpowered, by torch speed.** The v2 NetGuide is torch and rebuilds perception
++ runs a forward on *every sim's leaf* → ~67 s/game at sims=128; 8 concurrent workers thrashed (14 min,
+0 completions). Forced down to **sims=16 / N=24** (real gates: sims=128 / N=200). At such shallow search
+the two nets' guidance barely diverges (hence the near-coin-flip, identical W/L). **The definitive gate
+needs a v2 ONNX export** (fast inference → sims=128, N≥200) — which is also the v2 deploy path. Until
+then the verdict is: pipeline works end-to-end, v2 is safe on sample, dragapult improvement unproven.
+(Ops lesson repeat: `pkill -f gate_v2_vs_v5` self-matches the launching shell's own command line — it
+killed the parent before it spawned workers. Don't -f a pattern that appears in your own command.)
+
+**Next:** export v2 to ONNX (extend `export_onnx.py` for the deck_summary/archetype_id inputs +
+`OnnxGuide` deck context) → re-gate at sims=128/N≥200 for the real dragapult verdict; if v2 wins there,
+it becomes v6.

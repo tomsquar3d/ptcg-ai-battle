@@ -46,11 +46,30 @@ class NetGuide:
         self.net = PTCGNet(cfg).to(device).eval()
         self.net.load_state_dict(ck["model"])
         self.meta = {k: ck.get(k) for k in ("epoch", "val")}
+        # schema-v2 deck conditioning: the net wants the piloted deck's summary + archetype id.
+        # Set via set_deck(); until then it degrades to the "unknown deck" (zeros/0) row.
+        self.deck_cond = bool(getattr(cfg, "deck_cond", False))
+        self._ds = np.zeros(F.DECK_SUMMARY_DIM, dtype=np.float32)
+        self._aid = 0
+
+    def set_deck(self, deck, archetype_name: Optional[str] = None) -> None:
+        """Provide the deck the net is piloting (deck-conditioned v2 nets). No-op for v1 nets."""
+        if self.deck_cond:
+            self._ds = F.summarize_deck(list(deck), self.ci)
+            self._aid = F.archetype_id_for(archetype_name)
+
+    def _deck_keys(self) -> dict:
+        if not self.deck_cond:
+            return {}
+        return {
+            "deck_summary": torch.from_numpy(self._ds).float().unsqueeze(0).to(self.device),
+            "archetype_id": torch.tensor([int(self._aid)], device=self.device).long(),
+        }
 
     # --- state featurization ---------------------------------------------------------
     def _state_batch(self, sf: F.StateFeatures) -> dict:
         t = lambda a, f: f(torch.from_numpy(a)).unsqueeze(0).to(self.device)
-        return {
+        b = {
             "pokemon_ids": t(sf.pokemon_ids, lambda x: x.long()),
             "pokemon_scalars": t(sf.pokemon_scalars, lambda x: x.float()),
             "pokemon_mask": t(sf.pokemon_mask, lambda x: x.bool()),
@@ -59,6 +78,8 @@ class NetGuide:
             "stadium_id": torch.tensor([int(sf.stadium_id)], device=self.device).long(),
             "globals": t(sf.globals, lambda x: x.float()),
         }
+        b.update(self._deck_keys())
+        return b
 
     # --- MCTS hooks ------------------------------------------------------------------
     @torch.no_grad()
@@ -82,6 +103,7 @@ class NetGuide:
         sf = F.encode_state(gs, self.ci, self.ai)
         af = F.encode_actions(obs.select, gs.my_index, self.ai)
         batch = collate([sf], [af], self.device)
+        batch.update(self._deck_keys())                   # v2 deck conditioning (no-op for v1 nets)
         logits, _ = self.net(batch)                       # [1, MAX_OPTIONS], padded → -inf
         probs = torch.softmax(logits[0], dim=0).cpu().numpy()
 
