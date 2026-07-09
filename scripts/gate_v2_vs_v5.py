@@ -157,9 +157,10 @@ def main() -> int:
     deck = _read_deck(deck_path)
 
     from nn.onnx_guide import OnnxGuide
-    v2 = OnnxGuide(args.v2_onnx, ci, ai)                  # deck-conditioned v2 net (ONNX, fast)
+    v2 = OnnxGuide(args.v2_onnx, ci, ai)                  # deck-conditioned net (ONNX, fast)
     v2.set_deck(deck, args.archetype)                     # deck-condition it on the piloted deck
-    v5 = OnnxGuide(args.v5_onnx, ci, ai)                  # shipped v5 net (v1 schema, set_deck no-op)
+    v5 = OnnxGuide(args.v5_onnx, ci, ai)                  # baseline net
+    v5.set_deck(deck, args.archetype)                     # no-op for a v1 net; conditions a deck-cond one
 
     games = 2 if args.benchmark else args.games
     v2_w = v2_l = draw = 0

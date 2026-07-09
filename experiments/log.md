@@ -1597,3 +1597,31 @@ conditioned on Alakazam ✓** (deck_cond + nonzero deck_summary), all games DONE
 **v6 is ready to submit.** Bundle: `submission_v6.tar.gz`. It is the first agent past the sample-deck
 ceiling (#42). Post-submit: track its ladder μ vs v5's 553.9 (ground truth vs the real 1200-rated field);
 run the control net_ladder2(sample) vs v5(sample) ≈ parity to attribute the gain to the deck.
+
+## #44 — Flywheel gen-2: Alakazam self-play (real value) **beats v6 72.9%** — v7 candidate
+
+**Date:** 2026-07-09 · v6 is live on the ladder at **681.4 (+120 over v5's 560.9)** — biggest gain of the
+project, confirming #42 offline. To push further, ran the AlphaZero flywheel on Alakazam (the lever
+identified: BC gives policy but not value; self-play from a now-competent pilot gives real value).
+
+**Setup.** (1) **Grew the corpus:** re-ran the resumable harvester (rate-limit window reset) → **201 →
+1,834 replays**; rebuilt ladder-BC = **73,001 rows** (winner ratings up to 1305). Fixed a crash on
+null-reward (unfinished) replays in `_winner_seat` + hardened `build_ladder_bc`. (2) **Self-play:**
+`record_mixed --deck alakazam --net-only --onnx-dir ladder2` (fixed `MctsPilot` to forward `set_deck`
+so the net self-plays deck-conditioned) → **52,118 Alakazam rows with REAL value z** (from outcomes, not
+BC's fake all-+1). (3) **Train** `net_ladder3.pt` on alakazam_sp (--buffer, real value, value head trains
+purely on this) + ladder_bc2 (--bc-buffer, --mask-bc-value, policy only). Deck-conditioning keeps the
+non-Alakazam BC from corrupting Alakazam play.
+
+**Gate (equal wall-clock, ONNX both, both deck-conditioned — fixed the gate to `set_deck` BOTH guides):**
+```
+  net_ladder3 (flywheel) vs net_ladder2 (v6), ALAKAZAM mirror, 96 games:  70/26 = 72.9% ±4.5%  z=+5.05
+```
+**The flywheel is a decisive win.** Self-play real-value targets improved the Alakazam pilot far beyond
+v6 — closing the value gap BC couldn't (v6's value head only generalized to Alakazam from sample; v7's
+trained on 52k real Alakazam outcomes). Since v6 already beats sample+v5 72.9%, v7 is transitively well
+ahead of the original ship.
+
+**→ v7 CANDIDATE = Alakazam deck + net_ladder3.** Next: build the v7 bundle (as v6, ONNX from `ladder3`)
++ timeout-validate + submit → track ladder μ vs v6's 681.4. The flywheel can iterate again (net_ladder3
+self-play → gen-3). Harvest infra now yields ~1.8k replays/window — corpus grows cheaply.

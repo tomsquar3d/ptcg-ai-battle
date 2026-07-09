@@ -27,7 +27,9 @@ DECK_LEN = 60
 
 
 def _winner_seat(rewards) -> Optional[int]:
-    if not rewards or len(rewards) != 2 or rewards[0] == rewards[1]:
+    # ladder replays can carry null rewards (unfinished / errored games) — treat as undecided
+    if (not rewards or len(rewards) != 2 or rewards[0] is None or rewards[1] is None
+            or rewards[0] == rewards[1]):
         return None
     return 0 if rewards[0] > rewards[1] else 1
 

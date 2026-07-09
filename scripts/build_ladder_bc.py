@@ -63,7 +63,10 @@ def main() -> int:
         m = _EID.search(fn)
         eid = m.group(1) if m else None
         wr = _winner_rating(index.get(eid, {})) if eid else 0.0
-        tup = replay_to_tuples(os.path.join(args.replays, fn), ci, ai, winner_rating=wr)
+        try:
+            tup = replay_to_tuples(os.path.join(args.replays, fn), ci, ai, winner_rating=wr)
+        except Exception:
+            tup = None                      # one malformed replay must never kill the whole build
         if tup is None:
             n_skip += 1
             continue
