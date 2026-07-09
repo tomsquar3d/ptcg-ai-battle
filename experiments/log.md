@@ -1502,3 +1502,38 @@ strong-teacher source for the new deck). A useful multi-deck net would need (i) 
 net or per-deck data balancing to avoid dilution, AND (ii) a genuinely strong dragapult teacher first
 (the phase-2 wall). Neither is a quick win. **v5 stays shipped; §3d phase 1 closes here as a negative
 result.** ONNX deck-cond infra + the v2 pipeline are kept (reusable if a strong teacher ever appears).
+
+## #41 — Ladder-BC: harvest top-tier play, train, gate = **NO v6 (sample tie); meta report is the win**
+
+**Date:** 2026-07-08 · Realizes §3 training-path step 1 (BC on winners) from the actual Kaggle ladder —
+the "strong teacher" lever #40 identified.
+
+**1. HARVEST (`scripts/harvest_ladder.py`, in-process Kaggle API).** Leaderboard is **4,603 teams** (the
+earlier "20" was one `--show` page); 2,529 ≥ 650 — too many to pull exhaustively, so top-20 teams
+(scores 1061-1214) + our v5 → 983 episodes enumerated. **Kaggle rate-limits replays ~200/window (429)**
+→ harvested **201 replays** (added retry/backoff/resume). Stored `data/replays/` + `index.json`.
+
+**2. META REPORT (`ladder_meta.py` → `experiments/ladder_meta.md`) — the standout.** 402 deck sightings,
+17 archetypes. **Ladder meta: Alakazam Stage-2 dominates 36% (65% win, rating 1161); Kangaskhan 20%;
+Garchomp 14%. Complex evolution decks = 72% of top play. Dragapult ex = 1%/25%-win fringe** — independent
+confirmation of #40. **Supersedes the TrainerHill priors.**
+
+**3. BC DATASET (`ladder_bc.py`, `build_ladder_bc.py`).** Winner groundable single-selects → one-hot BC
+rows, z=+1, deck-conditioned on the winner's recovered decklist, aux, SOURCE_BC. **7,817 rows / 23 decks**,
+winner ratings median 1116, 0 unusable.
+
+**4. TRAIN (`net_ladder.pt`).** #40 dilution fix: fresh deck-cond+aux **sample self-play (40,810 rows,
+strong MCTS)** merged (`dataset.merge_buffers`, `train_net --bc-buffer`, `record_mixed --sample-only`) with
+ladder-BC = 48.6k, **84% sample (dominant → no dilution)**. BC-warmup → AlphaZero. Val top1 67.6%, sign 77%.
+
+**5-6. GATE (equal-wall-clock ONNX; v5+net_v2 untouched) → NO v6:**
+```
+  (a) sample, must WIN:  49.5% ±3.5% z=-0.14  → TIE (FAIL)
+      dragapult (complex): 34.7% ±3.4% z=-4.54 → below v5 (saw ~no dragapult)
+```
+**Findings:** (1) **Dilution is fixable** — sample-dominant mix keeps the ship deck at PARITY (not #40's
+−10pt regression). (2) **Ladder-BC didn't improve sample** — cross-deck transfer from Alakazam/Kangaskhan
+to the simple sample deck adds nothing v5 lacked (v5 near sample's ceiling). (3) Net pilots untrained decks
+worse (dragapult 34.7%). (4) **The meta report is the durable win** — real simulator meta now known.
+Gate (c) line_audit not built; complex-deck win rate is the execution proxy. **v5 stays shipped.** Harvest/
+BC/meta infra kept; corpus grows by re-running the resumable harvester across rate-limit windows.

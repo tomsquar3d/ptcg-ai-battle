@@ -76,8 +76,10 @@ def _multi_pick(obs, mi, deck, ci, ai, tracker):
         search_end()
 
 
-def play_game(deck, ci, ai, v2, v5, a_seat, sims, k, move_cap=12.0):
-    """Mirror game; seat a_seat guided by v2, other by v5. Returns winner seat (0/1)/-1 + sims tally."""
+def play_game(deck, ci, ai, v2, v5, a_seat, sims, k, move_cap=12.0, budget=None):
+    """Mirror game; seat a_seat guided by v2, other by v5. Returns winner seat (0/1)/-1 + sims tally.
+    `budget` (seconds/move) switches to equal-WALL-CLOCK mode (both search to a deadline)."""
+    MAX_SIMS = 200_000
     trackers = {0: OpponentTracker(), 1: OpponentTracker()}
     result = -1
     a_d = b_d = 0
@@ -112,8 +114,9 @@ def play_game(deck, ci, ai, v2, v5, a_seat, sims, k, move_cap=12.0):
                 guide = v2 if mi == a_seat else v5
                 try:
                     worlds = determinize(obs, deck, ci, k=k, opp_tracker=trackers[mi])
-                    deadline = time.monotonic() + move_cap
-                    pick, _st = mcts.search(obs, worlds, ci, ai, sims=sims, deadline=deadline,
+                    n_sims = MAX_SIMS if budget else sims
+                    deadline = time.monotonic() + (budget if budget else move_cap)
+                    pick, _st = mcts.search(obs, worlds, ci, ai, sims=n_sims, deadline=deadline,
                                             prior_fn=guide.priors, value_fn=guide.value)
                     if mi == a_seat:
                         a_d += 1
@@ -140,6 +143,7 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=2)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--budget", type=float, default=None, help="seconds/move — equal-WALL-CLOCK mode")
     ap.add_argument("--benchmark", action="store_true")
     args = ap.parse_args()
 
@@ -162,7 +166,7 @@ def main() -> int:
     t0 = time.monotonic()
     for g in range(games):
         a_seat = (args.seed + g) % 2
-        winner, s = play_game(deck, ci, ai, v2, v5, a_seat, args.sims, args.k)
+        winner, s = play_game(deck, ci, ai, v2, v5, a_seat, args.sims, args.k, budget=args.budget)
         if winner == a_seat:
             v2_w += 1
         elif winner in (0, 1):
