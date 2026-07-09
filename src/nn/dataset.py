@@ -73,6 +73,27 @@ def load_buffer(buffer_dir: str) -> Buffer:
                   n_games=len(paths), dropped_pass_mass=dropped)
 
 
+def merge_buffers(*bufs: Buffer) -> Buffer:
+    """Concatenate buffers on their COMMON keys (drops loader-only extras like ladder `rating`/
+    `deck_key`), offsetting game ids so games stay distinct for the GAME-level split. π is recomputed
+    from the merged visit counts. Used to mix sample self-play + ladder-BC (docs §3d follow-up)."""
+    bufs = [b for b in bufs if b is not None and len(b.game_id)]
+    if len(bufs) == 1:
+        return bufs[0]
+    common = set(bufs[0].data)
+    for b in bufs[1:]:
+        common &= set(b.data)
+    data = {k: np.concatenate([b.data[k] for b in bufs]) for k in common}
+    gids, off = [], 0
+    for b in bufs:
+        gids.append(b.game_id + off)
+        off += b.n_games
+    game_id = np.concatenate(gids)
+    pi, dropped = policy_targets(data["visits"])
+    return Buffer(data=data, pi=pi, game_id=game_id,
+                  n_games=sum(b.n_games for b in bufs), dropped_pass_mass=dropped)
+
+
 def split_by_game(buf: Buffer, val_frac: float, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
     """Return (train_idx, val_idx) row indices, holding out whole games for validation."""
     rng = np.random.default_rng(seed)

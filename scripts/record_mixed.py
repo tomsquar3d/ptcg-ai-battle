@@ -87,6 +87,8 @@ def main() -> int:
     ap.add_argument("--onnx-dir", default=None, help="dir with value.onnx/policy.onnx → enables net sides")
     ap.add_argument("--out-dir", default=os.path.join(REPO, "experiments", "selfplay", "mixed"))
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--sample-only", action="store_true",
+                    help="restrict to sample-deck sides (for a deck-cond+aux sample buffer, #40 dilution fix)")
     ap.add_argument("--benchmark", action="store_true")
     args = ap.parse_args()
 
@@ -100,6 +102,8 @@ def main() -> int:
     ai = {a.attackId: a for a in all_attack()}
 
     sides_cfg = _default_sides(with_net=bool(args.onnx_dir))
+    if args.sample_only:
+        sides_cfg = [s for s in sides_cfg if s[0] == "sample"]   # sample × {heuristic, net}
     # build each side's (name, deck, pilot) once; reuse pilots across games (net = ONNX session).
     sides = []
     for name, deck_path, spec in sides_cfg:

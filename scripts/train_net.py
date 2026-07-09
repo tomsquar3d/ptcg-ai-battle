@@ -105,12 +105,21 @@ def main() -> int:
     ap.add_argument("--aux-weight", type=float, default=0.5)
     ap.add_argument("--bc-epochs", type=int, default=0,
                     help="v2: policy-only BC warmup epochs over SOURCE_BC (expert) rows before main training")
+    ap.add_argument("--bc-buffer", default=None,
+                    help="v2: extra buffer (e.g. ladder-BC) merged with --buffer on common keys")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     buf = D.load_buffer(args.buffer)
+    if args.bc_buffer:
+        bc = D.load_buffer(args.bc_buffer)
+        n_main, n_bc = len(buf.game_id), len(bc.game_id)
+        buf = D.merge_buffers(buf, bc)
+        src = buf.data.get("source")
+        print(f"merged: {n_main} main + {n_bc} BC = {len(buf.game_id)} rows "
+              f"({int((src==1).sum()) if src is not None else '?'} BC-source)")
     tr, va = D.split_by_game(buf, args.val_frac, seed=args.seed)
     print(f"buffer: {len(buf.game_id)} decisions from {buf.n_games} games "
           f"| train {len(tr)} / val {len(va)} | dropped PASS mass {buf.dropped_pass_mass:.2%}")
