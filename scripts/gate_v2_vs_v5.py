@@ -133,7 +133,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--archetype", default="dragapult-dusknoir", help="deck both seats pilot")
     ap.add_argument("--deck", default=None)
-    ap.add_argument("--v2", default=os.path.join(REPO, "experiments", "checkpoints", "net_v2.pt"))
+    ap.add_argument("--v2-onnx", default=os.path.join(REPO, "experiments", "checkpoints", "v2"))
     ap.add_argument("--v5-onnx", default=os.path.join(REPO, "experiments", "checkpoints"))
     ap.add_argument("--games", type=int, default=20)
     ap.add_argument("--sims", type=int, default=128)
@@ -152,11 +152,10 @@ def main() -> int:
                               else os.path.join(CAND, f"{args.archetype}.csv"))
     deck = _read_deck(deck_path)
 
-    from nn.guide import NetGuide
     from nn.onnx_guide import OnnxGuide
-    v2 = NetGuide(args.v2, ci, ai)
-    v2.set_deck(deck, args.archetype)                     # deck-condition the v2 net on the piloted deck
-    v5 = OnnxGuide(args.v5_onnx, ci, ai)
+    v2 = OnnxGuide(args.v2_onnx, ci, ai)                  # deck-conditioned v2 net (ONNX, fast)
+    v2.set_deck(deck, args.archetype)                     # deck-condition it on the piloted deck
+    v5 = OnnxGuide(args.v5_onnx, ci, ai)                  # shipped v5 net (v1 schema, set_deck no-op)
 
     games = 2 if args.benchmark else args.games
     v2_w = v2_l = draw = 0

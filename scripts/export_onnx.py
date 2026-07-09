@@ -58,6 +58,36 @@ class _PolicyWrapper(nn.Module):
         return self.net.policy_scorer(torch.cat([opt, st], -1)).squeeze(-1)   # raw, unmasked
 
 
+class _ValueWrapperDC(nn.Module):
+    """Deck-conditioned (schema-v2) value graph: adds deck_summary + archetype_id state inputs."""
+    def __init__(self, net):
+        super().__init__()
+        self.net = net
+
+    def forward(self, pokemon_ids, pokemon_scalars, pokemon_mask, hand_ids, hand_mask, stadium_id,
+                globals, deck_summary, archetype_id):
+        b = dict(pokemon_ids=pokemon_ids, pokemon_scalars=pokemon_scalars, pokemon_mask=pokemon_mask,
+                 hand_ids=hand_ids, hand_mask=hand_mask, stadium_id=stadium_id, globals=globals,
+                 deck_summary=deck_summary, archetype_id=archetype_id)
+        return torch.tanh(self.net.value_head(self.net.encode_state(b))).squeeze(-1)
+
+
+class _PolicyWrapperDC(nn.Module):
+    def __init__(self, net):
+        super().__init__()
+        self.net = net
+
+    def forward(self, pokemon_ids, pokemon_scalars, pokemon_mask, hand_ids, hand_mask, stadium_id,
+                globals, deck_summary, archetype_id, option_card_ids, option_scalars):
+        b = dict(pokemon_ids=pokemon_ids, pokemon_scalars=pokemon_scalars, pokemon_mask=pokemon_mask,
+                 hand_ids=hand_ids, hand_mask=hand_mask, stadium_id=stadium_id, globals=globals,
+                 deck_summary=deck_summary, archetype_id=archetype_id)
+        state = self.net.encode_state(b)
+        opt = self.net.opt_in(torch.cat([self.net.card_embed(option_card_ids), option_scalars], -1))
+        st = state.unsqueeze(1).expand(-1, opt.shape[1], -1)
+        return self.net.policy_scorer(torch.cat([opt, st], -1)).squeeze(-1)
+
+
 def _collect_states(n_want, ci, ai):
     """Grab a few real (state, action) featurizations to trace/validate with."""
     deck = [int(x) for x in open(os.path.join(REPO, "submissions", "v4", "deck.csv")).read().split() if x.strip()]
@@ -96,25 +126,36 @@ def main() -> int:
     cfg = NetConfig(**ck["config"]) if isinstance(ck.get("config"), dict) else NetConfig()
     net = PTCGNet(cfg).eval()
     net.load_state_dict(ck["model"])
+    deck_cond = bool(getattr(cfg, "deck_cond", False))
+    print(f"exporting {'deck-conditioned (v2)' if deck_cond else 'v1'} net → {out_dir}")
 
     states, actions = _collect_states(8, ci, ai)
     batch = collate(states, actions)
-    state_inputs = tuple(batch[k] for k in _STATE_ARGS)
+    if deck_cond:                      # attach the schema-v2 deck-conditioning state inputs
+        deck = [int(x) for x in open(os.path.join(REPO, "submissions", "v4", "deck.csv")).read().split() if x.strip()]
+        B = batch["pokemon_ids"].shape[0]
+        ds = F.summarize_deck(deck, ci)
+        batch["deck_summary"] = torch.from_numpy(np.repeat(ds[None], B, 0)).float()
+        batch["archetype_id"] = torch.full((B,), F.archetype_id_for("sample"), dtype=torch.long)
+
+    state_args = list(_STATE_ARGS) + (["deck_summary", "archetype_id"] if deck_cond else [])
+    ValueW = _ValueWrapperDC if deck_cond else _ValueWrapper
+    PolicyW = _PolicyWrapperDC if deck_cond else _PolicyWrapper
+    state_inputs = tuple(batch[k] for k in state_args)
     policy_inputs = state_inputs + (batch["option_card_ids"], batch["option_scalars"])
 
-    dyn = {"batch": {0: "batch"}}
     v_path = os.path.join(out_dir, "value.onnx")
     p_path = os.path.join(out_dir, "policy.onnx")
 
     torch.onnx.export(
-        _ValueWrapper(net), state_inputs, v_path, input_names=list(_STATE_ARGS),
+        ValueW(net), state_inputs, v_path, input_names=state_args,
         output_names=["value"], opset_version=18,
-        dynamic_axes={k: {0: "batch"} for k in list(_STATE_ARGS) + ["value"]})
+        dynamic_axes={k: {0: "batch"} for k in state_args + ["value"]})
     torch.onnx.export(
-        _PolicyWrapper(net), policy_inputs, p_path,
-        input_names=list(_STATE_ARGS) + ["option_card_ids", "option_scalars"],
+        PolicyW(net), policy_inputs, p_path,
+        input_names=state_args + ["option_card_ids", "option_scalars"],
         output_names=["logits"], opset_version=18,
-        dynamic_axes={k: {0: "batch"} for k in list(_STATE_ARGS) +
+        dynamic_axes={k: {0: "batch"} for k in state_args +
                       ["option_card_ids", "option_scalars", "logits"]})
 
     # The exporter writes weights to a sidecar `.onnx.data` file — fragile in a submission bundle.
@@ -133,7 +174,7 @@ def main() -> int:
     ps = ort.InferenceSession(p_path, so, providers=["CPUExecutionProvider"])
 
     def np_state():
-        return {k: batch[k].numpy() for k in _STATE_ARGS}
+        return {k: batch[k].numpy() for k in state_args}
 
     with torch.no_grad():
         t_logits, t_value = net(batch)

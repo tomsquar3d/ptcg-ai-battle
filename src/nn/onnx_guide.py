@@ -39,10 +39,20 @@ class OnnxGuide:
         prov = ["CPUExecutionProvider"]
         self.vs = ort.InferenceSession(os.path.join(model_dir, "value.onnx"), so, providers=prov)
         self.ps = ort.InferenceSession(os.path.join(model_dir, "policy.onnx"), so, providers=prov)
+        # schema-v2 deck conditioning: detected from the graph's inputs (auto for v1 or v2 models).
+        self.deck_cond = any(i.name == "deck_summary" for i in self.vs.get_inputs())
+        self._ds = np.zeros(F.DECK_SUMMARY_DIM, dtype=np.float32)
+        self._aid = 0
+
+    def set_deck(self, deck, archetype_name=None) -> None:
+        """Provide the piloted deck for a deck-conditioned (v2) model. No-op for v1 models."""
+        if self.deck_cond:
+            self._ds = F.summarize_deck(list(deck), self.ci)
+            self._aid = F.archetype_id_for(archetype_name)
 
     # --- featurization → onnx input dicts --------------------------------------------
     def _state_inputs(self, sf: F.StateFeatures) -> dict:
-        return {
+        d = {
             "pokemon_ids": sf.pokemon_ids[None].astype(np.int64),
             "pokemon_scalars": sf.pokemon_scalars[None].astype(np.float32),
             "pokemon_mask": sf.pokemon_mask[None],
@@ -51,6 +61,10 @@ class OnnxGuide:
             "stadium_id": np.asarray([int(sf.stadium_id)], dtype=np.int64),
             "globals": sf.globals[None].astype(np.float32),
         }
+        if self.deck_cond:
+            d["deck_summary"] = self._ds[None].astype(np.float32)
+            d["archetype_id"] = np.asarray([int(self._aid)], dtype=np.int64)
+        return d
 
     # --- MCTS hooks ------------------------------------------------------------------
     def value(self, state: Any, root_player: int) -> float:

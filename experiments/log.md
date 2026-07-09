@@ -1465,3 +1465,40 @@ killed the parent before it spawned workers. Don't -f a pattern that appears in 
 **Next:** export v2 to ONNX (extend `export_onnx.py` for the deck_summary/archetype_id inputs +
 `OnnxGuide` deck context) → re-gate at sims=128/N≥200 for the real dragapult verdict; if v2 wins there,
 it becomes v6.
+
+## #40 — Phase 5 gate at full power: v2 net vs v5 = **NEGATIVE, v2 does NOT ship** (`export_onnx.py`/`onnx_guide.py` deck-cond)
+
+**Date:** 2026-07-08 · **Plan:** docs §3d step 5, definitive gate. Exported the v2 net to ONNX so the
+gate could run at the real budget (sims=128/N=200), not the torch-limited sims=16/N=24 of #39.
+
+**v2 ONNX export.** `export_onnx.py` extended for the deck-conditioning inputs: `_ValueWrapperDC`/
+`_PolicyWrapperDC` add `deck_summary`+`archetype_id`; `OnnxGuide` auto-detects deck-cond from the graph's
+input names and `set_deck()` injects them. Exported to `experiments/checkpoints/v2/` (**v5's ONNX in
+`checkpoints/` untouched**). Numerically exact vs torch (value Δ 1.2e-7, logit Δ 8.3e-7), padded-board
+finite. Both guides ONNX now → ~20 s/game at sims=128 (vs ~67 s torch).
+
+**FULL-POWER GATE (mirror, same deck both seats, v2 OnnxGuide vs v5 OnnxGuide, sims=128/k=2, N=200 each):**
+```
+  dragapult-dusknoir:  v2 94/105/1 = 47.2% ±3.5%  z=-0.78   (criterion a: improve → FAIL, parity)
+  sample:              v2 79/121/0 = 39.5% ±3.5%  z=-3.04   (criterion b: no-regress → FAIL, REGRESSES)
+```
+**v2 does NOT ship. v5 remains the champion.**
+
+**Why (the real finding).** Two things, both instructive:
+1. **Sample regression is dilution.** v5 trained on ~118k *sample* decisions; v2's mixed buffer had only
+   **12.7k sample rows** (85% of it was dragapult) + 30% one-hot BC from a mediocre expert. The shipped
+   deck's signal was starved and its play degraded — a significant −10.5-pt regression.
+2. **No dragapult gain refutes the #32 OOD hypothesis.** Training the net *heavily* on dragapult
+   (69.6k rows) did **not** make it pilot dragapult better than the sample-only v5 (47%, parity). So v5's
+   weak dragapult play was **not** because it was out-of-distribution — it's that **dragapult-dusknoir is
+   genuinely harder to pilot well, and none of our teachers play it well** (heuristic, OOD-v5, and an
+   expert that only ties v1), so there was no strong dragapult play in the buffer to learn from.
+   AlphaZero-style distillation can't exceed its teachers, and on this deck every teacher is weak.
+
+**Strategic takeaways.** (a) **Deck arc stays closed, now with stronger evidence:** even a dragapult-
+trained net can't pilot it competitively — the limit is the deck + teacher quality, not pilot
+familiarity. (b) **Multi-deck training as done here is net-negative** (dilutes the shipped deck without a
+strong-teacher source for the new deck). A useful multi-deck net would need (i) a *dedicated* per-deck
+net or per-deck data balancing to avoid dilution, AND (ii) a genuinely strong dragapult teacher first
+(the phase-2 wall). Neither is a quick win. **v5 stays shipped; §3d phase 1 closes here as a negative
+result.** ONNX deck-cond infra + the v2 pipeline are kept (reusable if a strong teacher ever appears).
