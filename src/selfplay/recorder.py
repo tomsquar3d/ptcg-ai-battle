@@ -220,10 +220,18 @@ class MctsPilot(Pilot):
     """Determinized PUCT MCTS. Heuristic leaf by default; pass a net's `prior_fn`/`value_fn` for the
     net pilot. Branch decisions emit the root visit distribution (soft AlphaZero π target)."""
 
-    def __init__(self, name: str = "heuristic", prior_fn=None, value_fn=None):
+    def __init__(self, name: str = "heuristic", prior_fn=None, value_fn=None, guide=None):
         self.name = name
         self.prior_fn = prior_fn
         self.value_fn = value_fn
+        self.guide = guide      # for deck-conditioned nets: forward set_deck so the net sees its deck
+
+    def set_deck(self, deck) -> None:
+        if self.guide is not None and hasattr(self.guide, "set_deck"):
+            try:
+                self.guide.set_deck(deck, None)     # ladder decks trained at archetype_id 0
+            except Exception:
+                pass
 
     def act(self, obs, obs_dict, sel, my_index, deck, ci, ai, archetypes, tracker,
             *, kind, k, sims, move_time_cap, seed):
@@ -282,7 +290,7 @@ def build_pilot(spec: str, card_index: Mapping, attack_index: Mapping, *, onnx_d
             raise ValueError("net pilot needs onnx_dir (value.onnx/policy.onnx)")
         from nn.onnx_guide import OnnxGuide
         g = OnnxGuide(onnx_dir, card_index, attack_index)
-        return MctsPilot("net", prior_fn=g.priors, value_fn=g.value)
+        return MctsPilot("net", prior_fn=g.priors, value_fn=g.value, guide=g)
     if s.startswith("expert:"):
         from experts import get_expert
         return ExpertPilot(get_expert(s.split(":", 1)[1]))

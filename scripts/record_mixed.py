@@ -89,6 +89,9 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--sample-only", action="store_true",
                     help="restrict to sample-deck sides (for a deck-cond+aux sample buffer, #40 dilution fix)")
+    ap.add_argument("--deck", default=None, help="flywheel: self-play on THIS deck csv (with --archetype)")
+    ap.add_argument("--archetype", default=None, help="archetype name for --deck")
+    ap.add_argument("--net-only", action="store_true", help="with --deck: net-vs-net only (AlphaZero self-play)")
     ap.add_argument("--benchmark", action="store_true")
     args = ap.parse_args()
 
@@ -104,6 +107,10 @@ def main() -> int:
     sides_cfg = _default_sides(with_net=bool(args.onnx_dir))
     if args.sample_only:
         sides_cfg = [s for s in sides_cfg if s[0] == "sample"]   # sample × {heuristic, net}
+    if args.deck:                                                # flywheel: self-play on an arbitrary deck
+        sides_cfg = [(args.archetype or "deck", args.deck, "net")]
+        if not args.net_only:
+            sides_cfg.append((args.archetype or "deck", args.deck, "heuristic"))
     # build each side's (name, deck, pilot) once; reuse pilots across games (net = ONNX session).
     sides = []
     for name, deck_path, spec in sides_cfg:
