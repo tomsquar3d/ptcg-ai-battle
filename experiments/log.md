@@ -1625,3 +1625,21 @@ ahead of the original ship.
 **→ v7 CANDIDATE = Alakazam deck + net_ladder3.** Next: build the v7 bundle (as v6, ONNX from `ladder3`)
 + timeout-validate + submit → track ladder μ vs v6's 681.4. The flywheel can iterate again (net_ladder3
 self-play → gen-3). Harvest infra now yields ~1.8k replays/window — corpus grows cheaply.
+
+## #45 — v7 submission bundle: flywheel Alakazam agent, built + timeout-validated (`submissions/v7/`)
+
+**Date:** 2026-07-09 · Ships the #44 flywheel result (net_ladder3 beats v6's net 72.9% on Alakazam).
+
+**Bundle.** `submissions/v7/` = identical pipeline to v6 (deck-conditioned agent, Alakazam deck.csv) but
+the shipped net is **net_ladder3** (the flywheel net with a value head trained on real Alakazam self-play
+outcomes). `build_submission.py` `_ONNX_SUBDIR["v7"]="ladder3"` (v6's ladder2 + v5's checkpoints untouched;
+verified v7 value.onnx md5 ≠ v6's). Tarball `submission_v7.tar.gz` **5.5 MB**, torch-free, top-level.
+
+**Validated (`scripts/timing_v7.py`, torch poisoned):** torch-free ✓, net loads ✓, deck-conditioned on
+Alakazam ✓, all DONE, 0 illegal. **Timeout-safe:**
+- bank=600: 4/4 DONE, worst seat-time **145.5 s / 600 s** (4.1× margin, a touch better than v6's 200 s),
+  max move 5.2 s, **0 timeouts**.
+- bank=60 stress: throttle floored min bank at **18.2 s**, **0 timeouts**.
+
+**v7 ready to submit** (`submission_v7.tar.gz`). Expected to beat v6's live 681.4 (v7 beats v6 72.9%
+offline). Post-submit: track μ; the flywheel can iterate again (net_ladder3 self-play → gen-3).

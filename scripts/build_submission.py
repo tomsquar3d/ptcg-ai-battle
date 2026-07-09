@@ -16,7 +16,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Per-version ONNX source (subdir under experiments/checkpoints). Default = the checkpoints root (v5).
-_ONNX_SUBDIR = {"v6": "ladder2"}
+_ONNX_SUBDIR = {"v6": "ladder2", "v7": "ladder3"}
 
 
 def build(version: str) -> None:
