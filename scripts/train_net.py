@@ -107,6 +107,8 @@ def main() -> int:
                     help="v2: policy-only BC warmup epochs over SOURCE_BC (expert) rows before main training")
     ap.add_argument("--bc-buffer", default=None,
                     help="v2: extra buffer (e.g. ladder-BC) merged with --buffer on common keys")
+    ap.add_argument("--mask-bc-value", action="store_true",
+                    help="train value ONLY on MCTS rows (BC rows have fake all-+1 z → poison the value head)")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -174,7 +176,12 @@ def main() -> int:
             bd, pi, z = make_batch(buf, b, device, cfg.deck_cond)
             logits, value, aux = net.forward_train(bd)
             ce = policy_ce(logits, pi)
-            mse = torch.nn.functional.mse_loss(value, z)
+            if args.mask_bc_value:                        # value only on real-outcome (MCTS) rows
+                src = torch.from_numpy(buf.data["source"][b]).to(device)
+                vm = src == 0
+                mse = torch.nn.functional.mse_loss(value[vm], z[vm]) if bool(vm.any()) else value.sum() * 0.0
+            else:
+                mse = torch.nn.functional.mse_loss(value, z)
             loss = ce + args.value_weight * mse
             if cfg.aux_heads:
                 al = aux_loss(aux, D.aux_targets(buf, b, device))
