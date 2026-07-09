@@ -15,6 +15,9 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Per-version ONNX source (subdir under experiments/checkpoints). Default = the checkpoints root (v5).
+_ONNX_SUBDIR = {"v6": "ladder2"}
+
 
 def build(version: str) -> None:
     target = os.path.join(REPO, "submissions", version)
@@ -44,7 +47,7 @@ def build(version: str) -> None:
         os.makedirs(dst_nn)
         for f in ("__init__.py", "features.py", "onnx_guide.py"):   # NO encoder/guide/dataset (torch)
             shutil.copy2(os.path.join(REPO, "src", "nn", f), os.path.join(dst_nn, f))
-        ckpt_dir = os.path.join(REPO, "experiments", "checkpoints")
+        ckpt_dir = os.path.join(REPO, "experiments", "checkpoints", _ONNX_SUBDIR.get(version, ""))
         for model in ("value.onnx", "policy.onnx"):
             src_model = os.path.join(ckpt_dir, model)
             if os.path.exists(src_model):

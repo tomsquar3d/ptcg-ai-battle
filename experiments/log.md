@@ -1574,3 +1574,26 @@ bundle (alakazam deck.csv + net_ladder2 ONNX + deck-conditioned OnnxGuide that s
 test; (c) confirmation controls worth running: net_ladder2(sample) vs v5(sample) should be ~parity (proves
 Gate B is the deck), and ideally a real-ladder submission for ground truth. This is the project's first
 path past the sample-deck ceiling.
+
+## #43 — v6 submission bundle: deck-conditioned Alakazam agent, built + timeout-validated (`submissions/v6/`)
+
+**Date:** 2026-07-08 · Ships the #42 breakthrough (Alakazam + net_ladder2 beats sample+v5 72.9%).
+
+**Bundle.** `submissions/v6/` = v5 pipeline (perception → governor → determinize → PUCT MCTS → most-visited)
+but the shipped net is the **deck-conditioned `net_ladder2`** and the agent `set_deck`s the Alakazam
+decklist onto the `OnnxGuide` so the net conditions on it (deck_summary + archetype_id 0, matching
+training). Graceful degradation to heuristic MCTS unchanged. `deck.csv` = the ladder Alakazam list.
+`build_submission.py` made version-aware (`_ONNX_SUBDIR["v6"]="ladder2"` → vendors net_ladder2's ONNX;
+v5's `checkpoints/` ONNX untouched). Tarball **5.4 MB** (main.py+deck.csv+onnx top-level, torch-free).
+
+**Validated (`scripts/timing_v6.py`, torch import poisoned):** torch-free ✓, net loads ✓, **deck-
+conditioned on Alakazam ✓** (deck_cond + nonzero deck_summary), all games DONE, 0 illegal.
+**Timeout-safe** despite Alakazam's long turns (~90+ decisions/game, vs v5's ~40):
+- bank=600 (realistic): 4/4 DONE, worst seat-time **200.6 s / 600 s** (3.3× margin — tighter than v5's
+  20× because Alakazam turns are expensive), max single move 5.2 s, **0 timeouts**.
+- bank=60 (stress): governor throttle floored min bank at **18.4 s** (≈ 20 s LOW_CLOCK instant threshold),
+  **0 timeouts** — the proportional throttle (≤10% of remaining) provably prevents overrun.
+
+**v6 is ready to submit.** Bundle: `submission_v6.tar.gz`. It is the first agent past the sample-deck
+ceiling (#42). Post-submit: track its ladder μ vs v5's 553.9 (ground truth vs the real 1200-rated field);
+run the control net_ladder2(sample) vs v5(sample) ≈ parity to attribute the gain to the deck.
