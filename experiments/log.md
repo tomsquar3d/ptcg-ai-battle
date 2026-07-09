@@ -1537,3 +1537,40 @@ to the simple sample deck adds nothing v5 lacked (v5 near sample's ceiling). (3)
 worse (dragapult 34.7%). (4) **The meta report is the durable win** — real simulator meta now known.
 Gate (c) line_audit not built; complex-deck win rate is the execution proxy. **v5 stays shipped.** Harvest/
 BC/meta infra kept; corpus grows by re-running the resumable harvester across rate-limit windows.
+
+## #42 — Alakazam deck + ladder-BC pilot **BEATS the ship 72.9%** — first non-sample winner; value-mask was the unlock
+
+**Date:** 2026-07-08 · Follow-up to #41: build the ladder's #1 deck (Alakazam) and pilot it with the
+ladder-BC net. Result: **the first deck+pilot to beat sample+v5 in the whole project.**
+
+**Deck (`experiments/candidate_decks/alakazam-ladder.csv`).** Extracted the real ladder Alakazam list
+from top-agent replays: played 82× by winners at **median rating 1213** (the #1 team's deck). Abra→
+Kadabra→Alakazam Stage-2 + Rare Candy + Dunsparce/Dudunsparce draw engine + Poffin/Poké Pad + Hilda/Dawn
++ Boss's + Enhanced Hammer + Telepath Psychic Energy. Legal, ladder-proven.
+
+**The bug + fix (the crux).** First pilot test — `net_ladder` (from #41) vs v5, Alakazam mirror, equal
+wall-clock, 96 games: **net_ladder 20.8% (z=-7.04)** — it *mimics* the busy Alakazam engine (~92 moves/
+game vs v5's ~17) but LOSES badly. Cause: **BC rows all carry z=+1 (winner-only), so they poison the
+value head** toward "+1 everywhere" on Alakazam states → MCTS gets garbage leaf values → bad play.
+Fix: `train_net.py --mask-bc-value` trains value ONLY on real-outcome MCTS rows (policy + aux still learn
+from BC). Retrained `net_ladder2.pt`.
+
+**Result after the fix (equal wall-clock, ONNX both sides):**
+```
+  Gate A2  net_ladder2 vs v5, ALAKAZAM mirror        74/22  = 77.1% ±4.3%  z=+6.31
+           (net_ladder poisoned = 20.8% → net_ladder2 = 77.1%: a full reversal)
+  Gate B   Alakazam+net_ladder2  vs  sample+v5 (SHIP) 70/26  = 72.9% ±4.5%  z=+5.05  ***
+```
+**Findings.** (1) **The value-mask fix is decisive** — BC-only imitation gives policy but not value;
+feeding its fake z into the value head actively breaks MCTS. Masking it rescued the pilot (20.8%→77.1%).
+(2) **net_ladder2 pilots the ladder's best deck far better than v5** (77%) — the ladder-BC produced a
+genuine strong Alakazam pilot, exactly the strong-teacher payoff #40/#41 were chasing. (3) **Alakazam +
+net_ladder2 BEATS our current ship (sample+v5) 72.9%** — the DECK ARC REOPENS. Recall Gate-A(#41) showed
+net_ladder≈v5 on *sample* (tie), so this win is the DECK+knowing-pilot, not a generally-stronger net.
+
+**→ v6 CANDIDATE: ship the Alakazam deck piloted by net_ladder2.** Before shipping: (a) build the v6
+bundle (alakazam deck.csv + net_ladder2 ONNX + deck-conditioned OnnxGuide that set_deck's Alakazam);
+(b) **timeout-validate** — Alakazam turns are long (~92 decisions/game) so re-run the draining-bank clock
+test; (c) confirmation controls worth running: net_ladder2(sample) vs v5(sample) should be ~parity (proves
+Gate B is the deck), and ideally a real-ladder submission for ground truth. This is the project's first
+path past the sample-deck ceiling.
