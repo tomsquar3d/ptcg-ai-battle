@@ -141,19 +141,37 @@ def main() -> int:
     json.dump({"index": index, "min_rating": args.min_rating, "top_teams": args.top_teams},
               open(os.path.join(args.out, "index.json"), "w"))
     dl = skip = fail = 0
+    consec_429 = 0
     t0 = time.time()
     for i, eid in enumerate(index, 1):
         dest = os.path.join(args.out, f"episode-{eid}-replay.json")
         if os.path.exists(dest) and os.path.getsize(dest) > 1000:
             skip += 1
             continue
-        try:
-            api.competition_episode_replay(int(eid), path=args.out, quiet=True)
-            dl += 1
-        except Exception as e:
+        ok = False
+        for attempt in range(3):                      # retry with backoff on rate-limit (HTTP 429)
+            try:
+                api.competition_episode_replay(int(eid), path=args.out, quiet=True)
+                dl += 1
+                ok = True
+                consec_429 = 0
+                break
+            except Exception as e:
+                msg = str(e)
+                if "429" in msg or "Too Many Requests" in msg:
+                    consec_429 += 1
+                    time.sleep(min(5 * (attempt + 1) ** 2, 30))
+                    continue
+                break
+        if not ok:
             fail += 1
             if fail <= 5:
-                print(f"  replay {eid} failed: {type(e).__name__} {str(e)[:80]}")
+                print(f"  replay {eid} failed after retries", flush=True)
+        # Kaggle caps replay pulls per window (~200); once we hit a wall of 429s, stop — resume later
+        # (existing files are skipped, so a re-run continues where this left off).
+        if consec_429 >= 12:
+            print(f"  RATE-LIMITED (consecutive 429s) at {dl} downloads — stopping; re-run later to resume.")
+            break
         if args.sleep:
             time.sleep(args.sleep)
         if i % 50 == 0:
