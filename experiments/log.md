@@ -1791,3 +1791,19 @@ Costless (same net/deck/templates) → folds into a **v9 = v8 + posterior sampli
 sampling increment on the live ladder. Next open lever after this: extend `threat.py` past the opponent's
 active (bench/switch/ability) — but that's a leaf-eval enrichment (historically weaker payoff) and matters
 less to the net-piloted ship.
+
+## #50 — v9 bundle: v8 + per-world posterior sampling, built + timeout-validated (`submissions/v9/`)
+
+**Date:** 2026-07-10 · Ships #49's determinizer change (posterior sampling PASSED, pooled +5.8% z=+1.81).
+v9 = **v8 byte-for-byte** (same net_ladder3 ONNX — value.onnx md5 identical to v8; same Alakazam deck; same
+mined templates — templates file identical to v8) EXCEPT the vendored `search/determinizer.py` (+`ptcg/
+opponent.py`) now SAMPLE each world's opponent archetype from the posterior (`sample_archetype=True`) instead
+of MAP-collapse. `build_submission.py _ONNX_SUBDIR["v9"]="ladder3"`. Tarball `submission_v9.tar.gz` **5.4 MB**,
+torch-free, main.py+deck.csv top-level. **Timeout-validated (`scripts/timing_v9.py`, torch poisoned):** net
+loaded ✓, deck-conditioned ✓; bank=600 6/6 DONE worst **227.5 s/600** (≈v8's 230.8 — sampling adds no clock
+cost), 0 timeouts; bank=60 floored 18.7 s, 0 timeouts; 0 illegal / 2,369 moves.
+
+**v9 READY TO SUBMIT** — a clean A/B on v8 (only the determinizer differs). **SEQUENCING: hold until v8's
+rating converges**, then submit v9 so v9-vs-v8 isolates the posterior-sampling increment live (avoids two
+provisional submissions muddying the read). Stack so far vs the shipped v7: v8 = +live-meta templates
+(#47, live-leading raw WR), v9 = +posterior sampling (#49). Both offline-validated search enrichments.
