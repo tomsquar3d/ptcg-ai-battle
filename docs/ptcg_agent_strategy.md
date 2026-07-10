@@ -122,6 +122,23 @@ Adopted after ladder evidence that one-ply evaluation fails on plan-ahead decks 
 
 **Success = the confound is gone:** a net that plays `dragapult-dusknoir` competently lets us re-run #32 as a *clean* deck test (equal-sims, in-distribution pilot both sides) and finally separate "weaker deck" from "blind pilot". If a constructed deck then still loses, the deck arc closes for real; if one wins, deck construction re-opens.
 
+## 3e. Flywheel gen-3: field-inclusive self-play (SCOPE)
+
+**Motivation (experiments #48, #52).** The shipped Alakazam net line (net_ladder2 → net_ladder3) was self-played **Alakazam-vs-Alakazam only** — its value head has never seen a field-facing position. Two results now bound the alternatives: (a) net_ladder3 is *offline-stronger* than net_ladder2 as an Alakazam pilot, mirror **and** field (#48), so the live v7<v6 gap is rating path-dependence, not net skill; (b) the determinizer opponent-model wins **attenuate under the net pilot** — +6% (heuristic) → +5% (net) vs the field, **0% in the mirror** (#52). So the determinizer lever is ~tapped at ~+5%; **the un-attenuated lever is the net's own field play.** Gen-3 teaches the net to pilot Alakazam well against the *diverse field*, not just the mirror.
+
+**What already exists (no new recording infra needed).** `record_mixed_game` (`src/selfplay/recorder.py`) already plays **asymmetric** games — a different deck AND pilot per seat — and records deck-conditioned decisions for both movers (policy = MCTS visits, value = game outcome, per-mover perspective). The flywheel `--deck` mode just *restricts* it to a mirror. Gen-3 = a field matchup mix on top of the existing recorder, plus a training-recipe and a field-inclusive gate.
+
+**Design decisions (recommended):**
+1. **Matchup mix = ladder-proportional.** Our seat is always **Alakazam piloted by net_ladder3** (the strongest teacher — self-play quality tracks pilot strength). The opponent seat is drawn from the real ladder field: ~⅓ Alakazam (mirror, keep the competence we have — the #40 dilution lesson), ~⅔ field weighted by ladder share — Mega Kangaskhan (15%), Grimmsnarl (13%), Lucario / Garchomp / Archaludon / Cornerstone (~5% each). Modal decklists mined via `scripts/extract_decks.py` (Kangaskhan/Garchomp/Grimmsnarl done; Lucario/Archaludon/Ogerpon extracting).
+2. **Field opponent pilot = heuristic MCTS.** Deck-agnostic, needs no trained field net (our nets are OOD piloting field decks). Limitation to log: heuristic field play is weaker than the live field, so gen-3 learns to beat *heuristic-level* field — but the **value targets** (did Alakazam win from this field-facing board?) are field-realistic, which is exactly what the value head needs to calibrate. This is a strict improvement over mirror-only value.
+3. **Record only the Alakazam seat.** The recorder emits both seats' rows; keep only Alakazam-deck rows (filter by `deck_summary`) so we do NOT train the net to pilot field decks we never ship (#40 dilution guard). Field-seat rows are discarded.
+4. **Training.** Base = **net_ladder3**. Buffer = existing Alakazam mirror self-play (52k) + **new field-facing Alakazam self-play** (target ~30–50k rows) + ladder-BC (`--mask-bc-value`, policy only, as #42). Value head trains on real outcomes from mirror **and** field games → calibrated on field-facing leaves. Keep mirror volume comparable so mirror play doesn't regress.
+5. **Gate = FIELD-INCLUSIVE (the #48/#52 lesson).** The acceptance test is `scripts/gate_net_field.py`: gen-3 vs net_ladder3 AND vs net_ladder2, our Alakazam pilot **facing the field decks** (+ mirror control). Gen-3 must beat net_ladder3 **vs the field** (not just the mirror) to ship — a mirror-only gate is exactly what over-sold net_ladder3 and is not trusted again.
+
+**Phases:** (1) finish the field deck pool (extract Lucario/Archaludon/Ogerpon). (2) field self-play driver = `record_mixed` with a field SIDES config (Alakazam/net vs each field deck/heuristic) + a `deck_summary` filter to Alakazam rows. (3) generate ~750 games (~1.5 h at 8 workers, sims=160 — CPU self-play is the bottleneck, GPU still not worth it). (4) train gen-3 from net_ladder3. (5) field-inclusive gate → export ONNX → **v11** if it beats net_ladder3 vs the field. 
+
+**Open decisions:** base net (net_ladder3 primary; a net_ladder2 fork is a cheap alternative given its higher *live* rating); whether to also record field-seat rows as a deck-conditioned bonus (risk: #40 dilution — default no); a stronger field pilot than heuristic later (a self-played field net) if gen-3's heuristic-field ceiling shows.
+
 ## 4. Play strategies as computable objects
 
 Strategies are not scripted rules — each is an object the Belief Engine recomputes every turn.
