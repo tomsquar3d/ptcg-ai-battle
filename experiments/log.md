@@ -1859,3 +1859,24 @@ Its real value is the LIVE experiment: does net_ladder2 (the higher-rated live n
 wins beat v6's ceiling? Offline says +5% vs field but not significant, so the ladder is the arbiter. Ship to
 find out (submissions cheap in July), OR hold if unwilling to spend a slot on a sub-significant offline lean.
 New tools: `scripts/gate_v10_vs_v6.py`, `scripts/gate_cross_v10.py`.
+
+## #53 — Gen-3 field self-play: driver built + pilot validated (net_ladder3 is 89% mirror / 43% FIELD)
+
+**Date:** 2026-07-10 · Built `scripts/record_field.py` (docs §3e): our seat = Alakazam/net_ladder3, opponent =
+ladder-proportional field deck/heuristic (or ~⅓ Alakazam mirror), reusing `record_mixed_game` (already
+asymmetric) and KEEPING ONLY Alakazam rows (`mover==our_seat` filter) — trains Alakazam-vs-field without
+diluting toward piloting field decks (#40). Mined the full 6-deck field pool (Kangaskhan/Grimmsnarl/Garchomp/
+Lucario/Archaludon/Ogerpon).
+
+**Pilot (30 games, sims=160) → 2,121 Alakazam rows.** Opponent mix 30% mirror / 70% field (ladder-
+proportional ✓); median 74 rows/game; 2/30 legit-short games. **The headline finding — net_ladder3 is 89%
+in the MIRROR (8/9) but 43% vs the FIELD (9/21):** direct confirmation of the mirror-only training gap
+(#48/#52). Value labels are well-balanced (**52% +1 / 48% −1, mean z +0.044**) — clean value-head signal, no
+BC +1 poisoning, no skew. The field games are exactly the field-facing leaves net_ladder3's value head has
+never seen. **Pipeline validated → GO for the full run.**
+
+**Full-run plan:** ~560–750 games (target ~40–53k Alakazam rows) fanned across ~8 seed-workers (~15 min wall,
+CPU self-play the bottleneck). Then train gen-3 from net_ladder3 (mirror 52k + field ~40k + value-masked BC,
+value on real outcomes), field-inclusive gate (`gate_net_field.py` vs net_ladder3 AND net_ladder2), → v11 if
+it beats net_ladder3 vs the field. Note: field pilot is heuristic (weaker than live field) — value targets
+are still field-realistic; a stronger field pilot is the follow-up if the gate shows a ceiling.
