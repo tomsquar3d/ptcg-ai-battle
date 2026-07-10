@@ -1807,3 +1807,26 @@ cost), 0 timeouts; bank=60 floored 18.7 s, 0 timeouts; 0 illegal / 2,369 moves.
 rating converges**, then submit v9 so v9-vs-v8 isolates the posterior-sampling increment live (avoids two
 provisional submissions muddying the read). Stack so far vs the shipped v7: v8 = +live-meta templates
 (#47, live-leading raw WR), v9 = +posterior sampling (#49). Both offline-validated search enrichments.
+
+## #51 — v10 bundle: v6's net_ladder2 + mined templates + posterior sampling, built + validated (`submissions/v10/`)
+
+**Date:** 2026-07-10 · v8 converged to **642.3** (+6.6 over v7's 635.7, raw WR 52.0% vs 48.3% — templates
+confirmed a small live positive, matching the offline gate). v9 (v8+sampling) submitted, resolving. But the
+whole net_ladder3 line (v7→v9 ≈ 636–642) sits ~40 below **v6's net_ladder2 (683.7)** — a matchmaking/
+path-dependence gap (#48), not net skill. **v10 tests the other combination: stack the two GATED search
+wins onto the net that is actually winning live.**
+
+**v10 = net_ladder2 (v6's net) + mined templates (#46/#47) + per-world posterior sampling (#49).** Verified:
+value.onnx md5 == v6's (net_ladder2); templates == the mined set (== v8/v9); determinizer samples per-world
+(sample_archetype default True); net md5 ≠ v9 (ladder2 vs ladder3). Agent/deck/main identical to v6/v9 (the
+v6↔v9 agent.py diff is docstring-only). `build_submission.py _ONNX_SUBDIR["v10"]="ladder2"`. Tarball
+`submission_v10.tar.gz` **5.4 MB**, torch-free, top-level. **Timeout-validated (`scripts/timing_v10.py`):**
+net loaded ✓, deck-conditioned ✓; bank=600 6/6 DONE worst **155.2 s/600** (3.9× margin, better than v8/v9's
+~228 — net_ladder2 turns run a touch shorter), 0 timeouts; bank=60 floored 18.1 s, 0 timeouts; 0 illegal.
+
+**v10 READY.** Both component changes are individually gate-passed (templates +6.3% cross-deck; sampling
++5.8% pooled), but on the HEURISTIC pilot — not yet net-specifically A/B'd on net_ladder2. Caveat: the
+determinizer change is pilot-agnostic (it changes the searched worlds, not the prior/value source), so
+transfer is expected. Submission plan: v10 vs v6's 683.7 isolates whether the two search wins lift the
+higher-rated live net past its ceiling. Optional pre-ship: net-specific gate v10 vs v6 (net_ladder2 both,
+new vs old determinizer) for offline confirmation.
