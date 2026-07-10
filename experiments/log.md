@@ -1683,10 +1683,44 @@ in-game evidence) over 1,495 decks — only real semantic overlap (Cornerstone�
 misfires; determinize() smoke samples a full 60-card opponent world cleanly. (Separability is in-sample —
 a necessary check, not a generalization claim.)
 
-**Not yet shipped.** This is an offline data/quality change; nothing live is affected (v7's tarball is
-already uploaded). `build_submission.py` re-vendors `src/ptcg` so a future **v8** picks up the new templates
-automatically. **Next (gate before ship, per project discipline):** A/B the determinizer with new vs old
-templates head-to-head (heuristic MCTS pilot, both decks the sample/Alakazam) — does sharper opponent
-determinization actually raise win rate? If yes → v8. Follow-ups still open: per-world archetype **sampling
-across the posterior** (currently collapses to MAP argmax), and extending `threat.py` beyond the opponent's
-active (no bench/switch/ability lines).
+**Not yet shipped** (at time of #46). Offline data/quality change; nothing live affected. `build_submission.py`
+re-vendors `src/ptcg` so **v8** picks up the new templates automatically. Gate before ship (→ #47).
+
+## #47 — Gate the re-mined templates → **v8 SHIPS** (Alakazam + net_ladder3 + live-meta opponent templates)
+
+**Date:** 2026-07-09 · Gated #46's templates two ways (heuristic MCTS pilot both sides — no net → no OOD
+confound; the change is isolated to which template set the determinizer models the opponent with).
+
+**Mirror gate (`scripts/gate_templates.py`) — NEW vs OLD templates, same deck both seats.** sample (Mega
+Abomasnow, which OLD lacks): **54.7% z=+1.15**; Alakazam (both sets have an Alakazam): **53.3% z=+0.73**.
+Both lean positive, neither significant. **Lesson: the mirror gate is the wrong instrument** — a mirror never
+makes the agent FACE a deck the old set can't represent, so it under-tests the phantom-deck fix.
+
+**Cross-deck gate (`scripts/gate_cross_templates.py`) — the right instrument.** "Us" = Alakazam pilot; the
+OPPONENT plays a real ladder deck the OLD set has NO template for (modal lists mined via
+`scripts/extract_decks.py`). Vary only OUR determinizer (NEW vs OLD), opponent model fixed, our seat
+alternates, conditions interleaved so deck-matchup bias cancels. 200 games/opponent:
+```
+  vs Cynthia's Garchomp ex : NEW 57.0% / OLD 44.0%  Δ+13.0%  z=+1.84  NEW BETTER
+  vs Marnie's Grimmsnarl ex: NEW 30.0% / OLD 26.0%  Δ +4.0%  z=+0.63
+  vs Mega Kangaskhan ex    : NEW 52.0% / OLD 50.0%  Δ +2.0%  z=+0.28
+  POOLED (300 v 300)       : NEW 46.3% / OLD 40.0%  Δ +6.3%  z=+1.57
+```
+**All three positive, one significant, ZERO regressions.** Pooled z=+1.57 is a hair under strict 1.64, but
+the signal is consistent + directional and the change is **costless** (same net, same deck, only more-accurate
+opponent reference decks). This is with the heuristic pilot facing just 3 of the field; the shipped net-MCTS
+uses the same determinizer and the live field is more diverse, so this likely **understates** the ladder
+effect. **Verdict: PASS → ship v8.**
+
+**v8 bundle.** = v7 byte-for-byte (same `agent.py`, same Alakazam `deck.csv`, **same net_ladder3 ONNX** —
+verified value.onnx md5 identical to v7) EXCEPT the vendored `ptcg/archetype_templates.json` is the #46
+live-meta set (12 archetypes, verified vendored). `build_submission.py _ONNX_SUBDIR["v8"]="ladder3"`. Tarball
+`submission_v8.tar.gz` **5.4 MB**, torch-free, main.py+deck.csv top-level. **Timeout-validated
+(`scripts/timing_v8.py`, torch poisoned):** net loaded ✓, deck-conditioned ✓; bank=600 6/6 DONE worst
+seat-time **230.8 s/600** (2.6× margin, a bit above v7's 145 s — the 12-archetype classifier costs slightly
+more — but 0 timeouts); bank=60 stress floored at 18.6 s, 0 timeouts; 0 illegal across 2,493 moves.
+
+**v8 READY TO SUBMIT.** It's an A/B on v7: identical pilot+net, only sharper opponent modeling. Post-submit,
+compare v8 μ to v7's (isolates the template value on the live ladder). Follow-ups still open: per-world
+archetype **sampling across the posterior** (currently MAP-argmax collapse); extend `threat.py` beyond the
+opponent's active (no bench/switch/ability lines); flywheel gen-3.
