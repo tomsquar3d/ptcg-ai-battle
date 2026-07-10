@@ -1757,3 +1757,37 @@ just the rating number, is the skill signal for a young submission** — a fresh
 and lags its true skill. **Caveat:** field opponents here were heuristic-piloted, not the strong live field;
 mirror+heuristic-field consistency (4/4) mitigates but doesn't fully close it — revisit with a strong fixed
 opponent only if v8 stalls below v6 after full convergence. New tool: `scripts/gate_net_field.py`.
+
+## #49 — Per-world posterior sampling in the determinizer → PASS (search enrichment; feeds v9)
+
+**Date:** 2026-07-10 · With the #46 templates giving a real 12-archetype posterior, the determinizer was
+throwing it away: `build_opponent_belief` took the MAP **argmax** archetype for the zone model, so ALL K
+determinized worlds modeled the opponent as *certainly* their single most-likely deck — zero hedging of
+opponent-deck uncertainty. Fix (this is a SEARCH enrichment — the lever that pays; not a leaf-eval one):
+each world SAMPLES its opponent archetype from the posterior.
+
+**Change (minimal, toggle-guarded).** `build_opponent_belief(..., rng=None)`: when given an rng, draw the
+zone-model archetype ~ posterior instead of argmax. `determinize(..., sample_archetype=True)` threads its
+per-world rng through (`_split_opponent(sample_arch=)`), default ON, `False` = old MAP-collapse for A/B +
+rollback. Backward-compatible: rng=None keeps deterministic MAP (classification/tests/single-belief callers).
+
+**Verified (`scripts/verify_posterior_sampling.py`):** at an early, thin-evidence decision (posterior:
+alakazam 0.35 / kangaskhan 0.16 / grimmsnarl 0.14 / …), MAP-collapse → all 24 worlds `alakazam`; sampling →
+**8 distinct archetypes over 24 worlds** ≈ the posterior. Collapses to MAP automatically once the posterior
+peaks (evidence accrues). Exactly the intended hedge-when-uncertain / commit-when-sure behaviour.
+
+**Gate (`scripts/gate_posterior.py`, heuristic pilot both sides — isolates the search change; our Alakazam
+determinizer varies SMP vs MAP, opponent fixed MAP, seats alternate, N=240/opp):**
+```
+  vs Mega Kangaskhan ex : SMP 60.8% / MAP 42.5%  Δ+18.3%  z=+2.84  SMP BETTER
+  vs Alakazam (mirror)  : SMP 53.3% / MAP 46.7%  Δ +6.7%  z=+1.03
+  vs Cynthia's Garchomp : SMP 57.5% / MAP 57.5%  Δ +0.0%
+  vs Marnie's Grimmsnarl: SMP 38.3% / MAP 40.0%  Δ −1.7%  z=−0.26 (noise)
+  POOLED (480 v 480)    : SMP 52.5% / MAP 46.7%  Δ +5.8%  z=+1.81  (significant)
+```
+**PASS.** Pooled significant, one big significant win (Kangaskhan), no real regression. Kept ON by default.
+Costless (same net/deck/templates) → folds into a **v9 = v8 + posterior sampling** (build re-vendors
+`src/search`). Recommended sequencing: let v8's rating converge first so v9-vs-v8 cleanly isolates the
+sampling increment on the live ladder. Next open lever after this: extend `threat.py` past the opponent's
+active (bench/switch/ability) — but that's a leaf-eval enrichment (historically weaker payoff) and matters
+less to the net-piloted ship.

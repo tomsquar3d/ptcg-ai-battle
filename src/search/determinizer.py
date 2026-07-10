@@ -64,9 +64,12 @@ def _split_own(obs: Any, own_decklist: Sequence[int], card_index: Mapping[int, A
 
 
 def _split_opponent(obs: Any, card_index: Mapping[int, Any], archetypes, opp_tracker,
-                    own_decklist: Sequence[int], rng: random.Random):
+                    own_decklist: Sequence[int], rng: random.Random, sample_arch: bool = True):
     """Sample (opponent_deck, opponent_prize, opponent_hand, opponent_active) from the archetype
-    zone model, reconciled to exact zone counts with a guaranteed Basic in the deck."""
+    zone model, reconciled to exact zone counts with a guaranteed Basic in the deck.
+
+    `sample_arch` (default): draw this world's opponent archetype from the posterior; False =
+    MAP-collapse (every world uses the single most-likely archetype — the pre-#49 behaviour)."""
     st = obs.current
     me = st.yourIndex
     opp = 1 - me
@@ -75,7 +78,10 @@ def _split_opponent(obs: Any, card_index: Mapping[int, Any], archetypes, opp_tra
     deck_n = getattr(ops, "deckCount", 0) or 0
     prize_n = len(getattr(ops, "prize", None) or [])
 
-    ob = build_opponent_belief(obs, tracker=opp_tracker, archetypes=archetypes, card_index=card_index)
+    # rng => the zone-model archetype is SAMPLED from the posterior per world (not MAP-collapsed),
+    # so K determinized worlds spread over plausible opponent decks proportional to our belief.
+    ob = build_opponent_belief(obs, tracker=opp_tracker, archetypes=archetypes,
+                               card_index=card_index, rng=(rng if sample_arch else None))
     pool = Counter(ob.zone.pool) if ob.zone is not None else Counter(own_decklist)
     flat = _reconcile(pool, hand_n + deck_n + prize_n, rng)
     hand = flat[:hand_n]
@@ -107,12 +113,14 @@ def _split_opponent(obs: Any, card_index: Mapping[int, Any], archetypes, opp_tra
 
 def determinize(obs: Any, own_decklist: Sequence[int], card_index: Mapping[int, Any], *,
                 k: int = 1, archetypes: Optional[Sequence[Any]] = None, opp_tracker: Any = None,
-                seed: Optional[int] = None) -> list[tuple]:
+                seed: Optional[int] = None, sample_archetype: bool = True) -> list[tuple]:
     """Return K worlds, each a tuple `(your_deck, your_prize, opponent_deck, opponent_prize,
     opponent_hand, opponent_active)` valid to splat into `search_begin(obs, *world)`.
 
     `archetypes` defaults to the human-meta templates; pass `opp_tracker` (a persistent
     `OpponentTracker`) for exact seen-card evidence. `seed` makes sampling reproducible.
+    `sample_archetype` (default True): each world draws its opponent archetype from the classifier
+    posterior, so K worlds hedge opponent-deck uncertainty; False = MAP-collapse (pre-#49 behaviour).
     """
     if archetypes is None:
         from ptcg.archetypes import default_archetypes
@@ -122,6 +130,6 @@ def determinize(obs: Any, own_decklist: Sequence[int], card_index: Mapping[int, 
     for _ in range(k):
         your_deck, your_prize = _split_own(obs, own_decklist, card_index, None, rng)
         opp_deck, opp_prize, opp_hand, opp_active = _split_opponent(
-            obs, card_index, archetypes, opp_tracker, own_decklist, rng)
+            obs, card_index, archetypes, opp_tracker, own_decklist, rng, sample_arch=sample_archetype)
         worlds.append((your_deck, your_prize, opp_deck, opp_prize, opp_hand, opp_active))
     return worlds

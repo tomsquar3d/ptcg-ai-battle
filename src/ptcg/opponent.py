@@ -238,6 +238,7 @@ def build_opponent_belief(
     archetypes: Optional[Sequence[Archetype]] = None,
     deck_template: Optional[Mapping[int, int]] = None,
     card_index: Optional[Mapping[int, Any]] = None,
+    rng: Optional[Any] = None,
 ) -> OpponentBelief:
     """Build the opponent belief from an in-game Observation.
 
@@ -246,6 +247,11 @@ def build_opponent_belief(
     - `archetypes`: enables the archetype posterior; its MAP template drives the zone model
       unless `deck_template` is given explicitly (e.g. a known deck for determinization/tests).
       Pass `archetypes.default_archetypes()` for the human-meta set; omit for no classification.
+    - `rng`: when given (a `random.Random`), the zone-model archetype is SAMPLED from the posterior
+      instead of taken as the MAP argmax. Determinization passes its per-world rng here so K worlds
+      spread over plausible archetypes proportional to the posterior — hedging opponent-deck
+      uncertainty when evidence is thin, and collapsing to the MAP once the posterior is peaked.
+      Omit (default) for the deterministic MAP behaviour (classification/tests/single-belief callers).
     """
     state = getattr(observation, "current", None)
     if state is None:
@@ -262,7 +268,13 @@ def build_opponent_belief(
 
     template = deck_template
     if template is None and posterior:
-        best = max(posterior, key=posterior.get)
+        if rng is not None:
+            names = list(posterior)
+            weights = [max(posterior[n], 0.0) for n in names]
+            best = (rng.choices(names, weights=weights, k=1)[0]
+                    if sum(weights) > 0 else max(posterior, key=posterior.get))
+        else:
+            best = max(posterior, key=posterior.get)
         template = next((a.template for a in archetypes if a.name == best), None)
 
     zone = None
