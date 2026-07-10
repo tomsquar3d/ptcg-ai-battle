@@ -1643,3 +1643,50 @@ Alakazam ✓, all DONE, 0 illegal. **Timeout-safe:**
 
 **v7 ready to submit** (`submission_v7.tar.gz`). Expected to beat v6's live 681.4 (v7 beats v6 72.9%
 offline). Post-submit: track μ; the flywheel can iterate again (net_ladder3 self-play → gen-3).
+
+## #46 — Opponent model: re-mined archetype templates from the real ladder (stale TrainerHill → live meta)
+
+**Date:** 2026-07-09 · v7 is live (COMPLETE) but converging *below* v6 (650.6 vs 678.8) — though on only
+44 games vs v6's 66, and with a **higher raw ladder win rate (55.8% vs 49.2%)**, i.e. a still-climbing
+provisional rating, not a settled deficit. While it converges, attacked an orthogonal quality lever:
+**opponent modeling.**
+
+**The bug.** The opponent model (`opponent.py` naive-Bayes classifier + `determinizer.py` hidden-zone
+sampling) runs on `archetype_templates.json`, which was generated offline from a **TrainerHill scrape**
+(`build_priors.py`). Its 8 archetypes barely overlap the actual simulator ladder: only *Alakazam* is real;
+the rest (three Dragapult variants @ 11%/11%/6% priors, Zoroark, Greninja, Honchkrow, Slowking) are ~1% or
+absent on-ladder, while the ladder's #2–#4 decks (Mega Kangaskhan ex, Cynthia's Garchomp ex, Grimmsnarl ex)
+had **no template at all**. So for ~64% of opponents the determinizer sampled a *phantom* deck, and every
+opponent reply the 2-ply MCTS simulates was played from the wrong cards. (Correction to prior belief: the
+determinizer does **not** fill with our own decklist except as a last-resort fallback — it uses the MAP
+archetype template. The problem was the *templates*, not the mechanism.)
+
+**Fix — mine templates from the harvest** (`scripts/mine_archetypes.py`). Recover both agents' 60-card
+decklists from all **1,834 replays** → **3,668 sightings**, cluster by marquee Pokémon, build each
+archetype template = per-card *expected copies* across its sightings, rounded to exactly 60 by
+largest-remainder (**no filler-energy padding** — kills that secondary weakness too). `prior` = real ladder
+sighting share. Key refinement: **demote generic tech** (Fezandipiti ex, Munkidori, Dudunsparce, Lumineon,
+Radiant, Squawkabilly) from the marquee rule — else a Fezandipiti-ex *splash* forms a 35-distinct-list
+grab-bag cluster (19.4%) that swallows real engines. Demoting it re-labels those decks by their true engine:
+**Alakazam 15.7% → 32.6%** (matching the earlier hand-verified 36%), and the phantom "Fezandipiti archetype"
+vanishes.
+
+**Result — 12 real-ladder archetypes covering 93.7% of sightings**, replacing 8 mostly-phantom ones:
+Alakazam 32.6%, Mega Kangaskhan ex 15.2%, Marnie's Grimmsnarl ex 12.8%, Mega Lucario 5.2%, Cynthia's
+Garchomp ex 5.2%, Archaludon ex 5.0%, Cornerstone Ogerpon 3.7%, Dragapult ex 3.5%, Mega Abomasnow 2.8%,
+Togekiss 2.7%, Brambleghast 2.6%, Cubchoo 2.5%. Old TrainerHill file preserved as
+`archetype_templates.trainerhill.json`.
+
+**Validated (`scripts/validate_archetypes.py`):** all 12 templates sum to 60, 0 invalid card ids, priors>0;
+classifier **top-1 recovers a deck's own archetype at 98.9% full-reveal / 98.7% Pokémon-only** (realistic
+in-game evidence) over 1,495 decks — only real semantic overlap (Cornerstone↔Lucario, both Fighting Mega)
+misfires; determinize() smoke samples a full 60-card opponent world cleanly. (Separability is in-sample —
+a necessary check, not a generalization claim.)
+
+**Not yet shipped.** This is an offline data/quality change; nothing live is affected (v7's tarball is
+already uploaded). `build_submission.py` re-vendors `src/ptcg` so a future **v8** picks up the new templates
+automatically. **Next (gate before ship, per project discipline):** A/B the determinizer with new vs old
+templates head-to-head (heuristic MCTS pilot, both decks the sample/Alakazam) — does sharper opponent
+determinization actually raise win rate? If yes → v8. Follow-ups still open: per-world archetype **sampling
+across the posterior** (currently collapses to MAP argmax), and extending `threat.py` beyond the opponent's
+active (no bench/switch/ability lines).
