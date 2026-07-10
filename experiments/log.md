@@ -1724,3 +1724,36 @@ more — but 0 timeouts); bank=60 stress floored at 18.6 s, 0 timeouts; 0 illega
 compare v8 μ to v7's (isolates the template value on the live ladder). Follow-ups still open: per-world
 archetype **sampling across the posterior** (currently MAP-argmax collapse); extend `threat.py` beyond the
 opponent's active (no bench/switch/ability lines); flywheel gen-3.
+
+## #48 — "net_ladder3 regressed live" — DIAGNOSIS: premise REFUTED, no net regression
+
+**Date:** 2026-07-10 · v6/v7/v8 live: v6 **683.7** (67g, raw WR 50.0%), v7 **638.9** (58g, 49.1%),
+v8 **647.1** (48g, **53.2%**, still climbing). The apparent puzzle: v7's net_ladder3 beat v6's net_ladder2
+72.9% offline (#44) yet v7's *rating* sits ~45 pts below v6. Hypothesis: net_ladder3 overfit the Alakazam
+MIRROR (its only self-play matchup + its only gate) and is worse vs the ~2/3 non-Alakazam field.
+
+**Test (`scripts/gate_net_field.py`):** our Alakazam pilot swaps net_ladder3 ↔ net_ladder2, FACING a real
+field deck (heuristic-fixed), templates held constant, seats alternate, conditions interleaved. N=140/opp.
+```
+  opp Alakazam (control): L3 70.0% / L2 45.7%  Δ+24.3%  z=+2.91
+  opp Kangaskhan        : L3 45.7% / L2 30.0%  Δ+15.7%  z=+1.92
+  opp Garchomp          : L3 58.6% / L2 45.7%  Δ+12.9%  z=+1.52
+  opp Grimmsnarl        : L3 68.6% / L2 68.6%  Δ +0.0%
+  POOLED (280 v 280)    : L3 60.7% / L2 47.5%  Δ+13.2%  (sig)
+```
+**HYPOTHESIS REFUTED.** net_ladder3 ≥ net_ladder2 in ALL 4 configs (mirror AND field) — better by +13–16%
+or tied, never worse. It is NOT mirror-overfit; it's the stronger Alakazam pilot, field included.
+
+**So there is no reproducible net regression — the premise was wrong.** The live raw win rates tell the real
+story: v6 50.0% vs v7 49.1% are ~identical; the 45-pt RATING gap is matchmaking/convergence path-dependence
+(each agent sits near ~50% equilibrium against whatever pool it was matched into; v7 entered lower and, at
+49%, hasn't climbed to net_ladder3's true level). Clincher: **v8 (same net_ladder3 + new templates) has the
+HIGHEST raw live WR (53.2%) and is climbing** — impossible if ladder3 were broken.
+
+**Conclusion / actions.** (1) Do NOT "fix" net_ladder3 — it's our best net. (2) The v6>v7 live gap is rating
+noise, not skill. (3) v8 is the right bet (best net + validated-better templates, #47); let it converge —
+winning >50% vs its pool, its μ should rise past v7 toward v6. (4) **Methodology lesson: raw win rate, not
+just the rating number, is the skill signal for a young submission** — a fresh agent's rating is path-dependent
+and lags its true skill. **Caveat:** field opponents here were heuristic-piloted, not the strong live field;
+mirror+heuristic-field consistency (4/4) mitigates but doesn't fully close it — revisit with a strong fixed
+opponent only if v8 stalls below v6 after full convergence. New tool: `scripts/gate_net_field.py`.
