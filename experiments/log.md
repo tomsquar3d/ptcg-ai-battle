@@ -1830,3 +1830,32 @@ determinizer change is pilot-agnostic (it changes the searched worlds, not the p
 transfer is expected. Submission plan: v10 vs v6's 683.7 isolates whether the two search wins lift the
 higher-rated live net past its ceiling. Optional pre-ship: net-specific gate v10 vs v6 (net_ladder2 both,
 new vs old determinizer) for offline confirmation.
+
+## #52 — v10 pre-ship gate: determinizer wins attenuate under the net pilot (lean-positive, not sig)
+
+**Date:** 2026-07-10 · Gated v10's determinizer (mined templates #46 + posterior sampling #49) vs v6's
+(TrainerHill + MAP), NET held fixed at net_ladder2 both sides.
+
+**Mirror (`gate_v10_vs_v6.py`, Alakazam both, 240 games): 120/120 = 50.0% z=+0.00** — dead even. But a
+mirror under-tests the determinizer change (both sets have an Alakazam; opponent IS Alakazam so MAP is
+usually right) — the same wrong-instrument lesson as the #47 mirror.
+
+**Field (`gate_cross_v10.py`, net_ladder2 pilots Alakazam vs a heuristic field deck, our determinizer V10 vs
+V6, N=160/opp):**
+```
+  vs Cynthia's Garchomp : V10 50.0% / V6 41.2%  Δ+8.8%  z=+1.11
+  vs Mega Kangaskhan    : V10 45.0% / V6 37.5%  Δ+7.5%  z=+0.96
+  vs Marnie's Grimmsnarl: V10 68.8% / V6 70.0%  Δ−1.2%  z=−0.17
+  POOLED (240 v 240)    : V10 54.6% / V6 49.6%  Δ+5.0%  z=+1.10  (lean +, NOT sig)
+```
+**KEY FINDING: the determinizer wins ATTENUATE under the net pilot.** Templates +6.3% and sampling +5.8%
+each on the HEURISTIC pilot (vs field); combined on the NET pilot they're only +5.0% (vs field) and **0% in
+the mirror**. The net leans on its learned priors/values, so it's partly robust to opponent-deck-model
+quality — better determinization helps it less than it helps the heuristic. This also explains v8's modest
++6.6 live over v7 (real but small). No regression anywhere; the change stays costless and directionally +.
+
+**Call: v10 is a lean-positive, no-regression, costless variant (same net_ladder2 as v6, timeout-safe #51).**
+Its real value is the LIVE experiment: does net_ladder2 (the higher-rated live net, 683.7) + the two search
+wins beat v6's ceiling? Offline says +5% vs field but not significant, so the ladder is the arbiter. Ship to
+find out (submissions cheap in July), OR hold if unwilling to spend a slot on a sub-significant offline lean.
+New tools: `scripts/gate_v10_vs_v6.py`, `scripts/gate_cross_v10.py`.
