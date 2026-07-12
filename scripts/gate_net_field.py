@@ -142,7 +142,12 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--budget", type=float, default=0.35, help="seconds/move (net is slow — wall-clock cap)")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--net-a", default=LADDER3, help="net dir for condition A (default ladder3)")
+    ap.add_argument("--net-b", default=LADDER2, help="net dir for condition B (default ladder2)")
+    ap.add_argument("--label-a", default="L3")
+    ap.add_argument("--label-b", default="L2")
     args = ap.parse_args()
+    LA, LB = args.label_a, args.label_b
 
     ci = {c.cardId: c for c in all_card_data()}
     ai = {a.attackId: a for a in all_attack()}
@@ -150,9 +155,9 @@ def main() -> int:
     opp_path = ALAKAZAM_DECK if args.opp == "alakazam" else os.path.join(CAND, f"{args.opp}.csv")
     opp_deck = _read_deck(opp_path)
 
-    g3 = OnnxGuide(LADDER3, ci, ai); g3.set_deck(us_deck, "alakazam")   # v7 net (suspect)
-    g2 = OnnxGuide(LADDER2, ci, ai); g2.set_deck(us_deck, "alakazam")   # v6 net (champion)
-    print(f"US=alakazam piloted by {{ladder3 (v7), ladder2 (v6)}} | OPP={args.opp} heuristic | "
+    g3 = OnnxGuide(args.net_a, ci, ai); g3.set_deck(us_deck, "alakazam")   # condition A
+    g2 = OnnxGuide(args.net_b, ci, ai); g2.set_deck(us_deck, "alakazam")   # condition B
+    print(f"US=alakazam piloted by {{{LA}, {LB}}} | OPP={args.opp} heuristic | "
           f"{'wall '+str(args.budget)+'s' if args.budget else f'sims={args.sims}'} k={args.k}")
     print("varying ONLY our net (templates held constant); opponent fixed heuristic\n")
 
@@ -171,8 +176,8 @@ def main() -> int:
         if (gi + 1) % 20 == 0:
             p3 = w["L3"] / n["L3"] if n["L3"] else 0
             p2 = w["L2"] / n["L2"] if n["L2"] else 0
-            print(f"  [{gi+1}/{args.games}] our winrate  L3(v7) {w['L3']}/{n['L3']}={p3:.1%}  "
-                  f"L2(v6) {w['L2']}/{n['L2']}={p2:.1%}  ({time.monotonic()-t0:.0f}s)", flush=True)
+            print(f"  [{gi+1}/{args.games}] our winrate  {LA} {w['L3']}/{n['L3']}={p3:.1%}  "
+                  f"{LB} {w['L2']}/{n['L2']}={p2:.1%}  ({time.monotonic()-t0:.0f}s)", flush=True)
     dt = time.monotonic() - t0
 
     p3 = w["L3"] / n["L3"] if n["L3"] else 0.0
@@ -180,15 +185,15 @@ def main() -> int:
     pooled = (w["L3"] + w["L2"]) / (n["L3"] + n["L2"]) if (n["L3"] + n["L2"]) else 0.0
     se = (pooled * (1 - pooled) * (1 / max(n["L3"], 1) + 1 / max(n["L2"], 1))) ** 0.5
     z = (p3 - p2) / se if se else 0.0
-    verdict = ("L3 BETTER vs field" if z > 1.64 else
-               ("L3 WORSE vs field (overfit confirmed)" if z < -1.64 else "no sig. diff (L3 edge GONE vs field)"))
+    verdict = (f"{LA} BETTER vs field" if z > 1.64 else
+               (f"{LA} WORSE vs field" if z < -1.64 else "no sig. diff"))
     print(f"\nNET-vs-FIELD | us=alakazam vs opp={args.opp} | {args.games} games in {dt:.0f}s\n"
-          f"  net_ladder3 (v7) as our pilot: {w['L3']}/{n['L3']} = {p3:.1%}\n"
-          f"  net_ladder2 (v6) as our pilot: {w['L2']}/{n['L2']} = {p2:.1%}\n"
-          f"  delta (L3 - L2) = {p3-p2:+.1%}  (z={z:+.2f})  ->  {verdict}\n"
-          f"  [mirror anchor from #44: L3 beats L2 72.9%. If delta here <= 0, the edge is mirror-only.]")
+          f"  {LA} as our pilot: {w['L3']}/{n['L3']} = {p3:.1%}\n"
+          f"  {LB} as our pilot: {w['L2']}/{n['L2']} = {p2:.1%}\n"
+          f"  delta ({LA} - {LB}) = {p3-p2:+.1%}  (z={z:+.2f})  ->  {verdict}")
     if args.out:
-        json.dump({"opp": args.opp, "w": w, "n": n, "p3": p3, "p2": p2, "delta": p3 - p2, "z": z,
+        json.dump({"opp": args.opp, "label_a": LA, "label_b": LB, "w": w, "n": n,
+                   "p3": p3, "p2": p2, "delta": p3 - p2, "z": z,
                    "games": args.games, "budget": args.budget, "seconds": dt}, open(args.out, "w"))
     return 0
 

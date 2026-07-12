@@ -1911,3 +1911,40 @@ ladder, wastes the signal. (2) Only ship changes big enough to clear the ~±40-p
 stronger NET, which is why **gen-3 field self-play** (net is 44% vs field, #53) is the right lever. (3) Even
 then, one 60-game result won't confirm it; require a LARGE offline field-gate margin + more games before
 believing a live number. (4) v6 is a legitimate ship; there's no obligation to beat it with every iteration.
+
+## #55 — Flywheel gen-3 (field-inclusive self-play) = NEGATIVE. net_ladder4 is WORSE; does NOT ship.
+
+**Date:** 2026-07-12 · Trained net_ladder4 from the gen-3 buffer (108,604 real-value rows = 52k mirror
+`alakazam_sp` + 56k `field` self-play, #53) + 73k value-masked ladder-BC, deck-cond+aux, 20 ep batch 512.
+Held to the higher bar (#54): must SUBSTANTIALLY improve net_ladder3's 44% field win rate.
+
+**Training red flag (caught live):** policy top-1 fine (21%→63.3%), but the VALUE HEAD OVERFIT badly — val
+MSE climbed 0.94(init)→1.43 (worse than a zero-predictor's ~1.0) while train MSE collapsed to 0.086; val
+value-sign fell 70.6%→~60%. Checkpoint is selected on policy top-1, so the saved net carries the degraded
+value head → corrupt MCTS leaf evals.
+
+**Gate (`gate_net_field.py` parameterized --net-a/--net-b; gen3=ladder4 vs net_ladder3, Alakazam pilot,
+heuristic opponent, N=140/opp):**
+```
+  mirror Alakazam : gen3 65.7% / L3 71.4%  Δ−5.7%
+  vs Kangaskhan   : gen3 15.7% / L3 38.6%  Δ−22.9%  z=−3.04  (gen3 WORSE, sig)
+  vs Garchomp     : gen3 34.3% / L3 30.0%  Δ+4.3%
+  vs Grimmsnarl   : gen3 48.6% / L3 50.0%  Δ−1.4%
+  FIELD POOLED    : gen3 32.9% / L3 39.5%  Δ−6.7%  z=−1.42
+```
+**gen-3 is WORSE than net_ladder3 — mirror AND field.** It didn't clear the bar; it regressed through it.
+**NO SHIP.** net_ladder3 / net_ladder2 remain better; v6 stays the champion.
+
+**Diagnosis.** Two compounding causes: (1) value-head overfit (val MSE worse than init → bad leaf values →
+bad play — the proximate cause); (2) low-quality field DATA — the field games were net_ladder3 LOSING 56%
+to a *heuristic* field pilot (#53), so the policy/value targets encode mediocre field play. We trained on
+weak field data through an overfitting value head and got a worse net. **The field-self-play lever, as
+executed, backfired.**
+
+**Lessons / options.** (a) Retrain fixes worth ONE cheap try: early-stop / far fewer epochs (val MSE was
+least-bad ~1.04 at ep2), stronger weight-decay, and CHECKPOINT ON VALUE not policy-top1 — but the value MSE
+never beat init at ANY epoch, so the signal itself may be too weak. (b) Root fix = a STRONGER field pilot
+than heuristic (self-play field data is only as good as the pilot generating it) — but we have no trained
+field net, so this is a bigger project. (c) Sober meta-read (with #52/#54): the determinizer lever is
+attenuated (~+5%, invisible to the ladder) AND the field-self-play lever backfired — the net_ladder2/3 family
+may be near its ceiling for this deck+approach. **v6 is a legitimate, defensible final ship.**
