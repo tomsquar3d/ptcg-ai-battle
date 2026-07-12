@@ -1880,3 +1880,34 @@ CPU self-play the bottleneck). Then train gen-3 from net_ladder3 (mirror 52k + f
 value on real outcomes), field-inclusive gate (`gate_net_field.py` vs net_ladder3 AND net_ladder2), → v11 if
 it beats net_ladder3 vs the field. Note: field pilot is heuristic (weaker than live field) — value targets
 are still field-realistic; a stronger field pilot is the follow-up if the gate shows a ceiling.
+
+## #54 — Why is v6 our best submission? ANALYSIS: it's the ladder's sampling noise, not a real edge
+
+**Date:** 2026-07-12 · v6 (683.7) has stayed top while four "offline-improved" successors landed below it
+(v7 635.7, v8 631.7, v9 642.0, v10 614.8). Ran opponent-level analysis (`competition_list_episodes` +
+leaderboard join) to find out why.
+
+**Finding 1 — v6 did NOT get a weak pool (opposite).** Mean opponent rating faced: v6 **719.6** (the
+HIGHEST), vs v7 714.0, v9 695.7, v10 682.9, v8 677.9. v6 earned its rating against the strongest opposition;
+the easy-matchmaking hypothesis is refuted.
+
+**Finding 2 — near-disjoint opponent samples.** Each submission played ~60 games vs ~60 DISTINCT opponents
+drawn from the **4,895-team** ladder; v6 shares only **2–3 opponents** with each successor (and 64 distinct
+opps over its own 66 games — almost no rematches). There is NO controlled live comparison between our agents;
+each rating is an independent high-variance estimate against a different random slice of the field.
+
+**Finding 3 — statistically indistinguishable.** Raw WRs 45.5–50.0%; Wilson 95% CIs all ≈[35%,62%] and fully
+overlap (±12% at ~60 games). The 69-pt rating spread (615→684) is **sampling noise**, not skill. v6 is the
+high end of the band, v10 the low end — same Alakazam family, different dice. (Per-strength bins: v6 41% vs
+strong / 70% vs weak, but bins are ~20–40 games → not robust.)
+
+**Conclusion.** v6 is "best" by **favorable draw + being the oldest/most-converged** sub, not a measurable
+edge. The ladder's resolution at ~60 disjoint games is **±12% WR / ~±40 rating** — so our offline-real but
+SMALL determinizer effects (±5–6%, #47/#49/#52) are **below the ladder's noise floor**. That is why four
+improved successors couldn't beat v6: the ladder cannot see changes that small at this N.
+
+**STRATEGY (governs submissions from here):** (1) STOP shipping marginal (±5%) variants — invisible to the
+ladder, wastes the signal. (2) Only ship changes big enough to clear the ~±40-pt band — i.e. a genuinely
+stronger NET, which is why **gen-3 field self-play** (net is 44% vs field, #53) is the right lever. (3) Even
+then, one 60-game result won't confirm it; require a LARGE offline field-gate margin + more games before
+believing a live number. (4) v6 is a legitimate ship; there's no obligation to beat it with every iteration.
