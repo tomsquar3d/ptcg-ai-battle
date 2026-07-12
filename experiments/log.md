@@ -1948,3 +1948,36 @@ than heuristic (self-play field data is only as good as the pilot generating it)
 field net, so this is a bigger project. (c) Sober meta-read (with #52/#54): the determinizer lever is
 attenuated (~+5%, invisible to the ladder) AND the field-self-play lever backfired — the net_ladder2/3 family
 may be near its ceiling for this deck+approach. **v6 is a legitimate, defensible final ship.**
+
+## #56 — Gen-3 salvage retrain (value fixes) = still NO SHIP; roots the failure in FIELD DATA, not the value head
+
+**Date:** 2026-07-12 · Diagnosed #55's "value overfit" as largely a METRIC ARTIFACT: `evaluate()` computed
+value MSE/sign over ALL val rows including the 73k BC rows (fake z=+1), so the "70.6%→60% sign drop / MSE
+0.94→1.43" was BC pollution, not a broken value head. **Fixed `train_net.py`:** (1) value metrics now
+computed on REAL-outcome rows only (source==0); (2) `--select {policy,value,sum}` checkpoint criterion
+(default policy = unchanged). Retrained gen-3b `--select sum --weight-decay 1e-3`, 15 ep.
+
+**Clean curve confirms a HEALTHY value head:** init sign 49.8% (correct for random) → **67–68% on real rows**;
+value MSE ~0.90 (flat, not blowing up). So the value head was fine all along.
+
+**Gate (gen3b vs net_ladder3, field, N=140/opp):**
+```
+  mirror Alakazam : gen3b 77.1% / L3 64.3%  Δ+12.9%  (value fix HELPED the mirror)
+  vs Kangaskhan   : gen3b 17.1% / L3 40.0%  Δ−22.9%  z=−2.99  (WORSE — identical collapse to gen-3)
+  vs Garchomp     : gen3b 42.9% / L3 40.0%  Δ+2.9%
+  vs Grimmsnarl   : gen3b 41.4% / L3 45.7%  Δ−4.3%
+  FIELD POOLED    : gen3b 33.8% / L3 41.9%  Δ−8.1%  z=−1.71
+```
+**Value fix improved the MIRROR but did NOTHING for the FIELD — still worse (33.8% vs 41.9%), Kangaskhan
+still 17%. NO SHIP.** This ROOTS the failure: the problem is the field POLICY DATA, not the value head. The
+field self-play was net_ladder3 LOSING 56% to a heuristic field pilot (esp. Kangaskhan), so the buffer clones
+a pilot that plays the field badly → the net plays the Kangaskhan matchup worse (identical 17% in both gen-3
+nets). **You cannot bootstrap better field play by imitating a weak field pilot. Field self-play from a weak
+pilot is a dead end as executed.**
+
+**Kept (real fixes, independent of this result):** the clean value metric + `--select` in `train_net.py` —
+the value metric was misleading for EVERY past training run; future gates should read the real-row value_sign.
+**FINAL POSITION:** determinizer lever attenuated (#52) below the ladder noise floor (#54); field-self-play
+lever backfired twice (#55/#56); the net_ladder2/3 family is at its ceiling for this deck+approach via these
+levers. **v6 (683.7) is the defensible final ship.** The only un-tried real lever is a STRONGER-than-heuristic
+field pilot (a genuinely competent multi-deck opponent to self-play against) — a large project, not an iteration.

@@ -59,14 +59,14 @@ def aux_loss(aux: dict, tgt: dict) -> torch.Tensor:
 def evaluate(net: PTCGNet, buf: D.Buffer, idx: np.ndarray, batch: int, device: str,
              deck_cond: bool, aux_heads: bool) -> dict:
     net.eval()
+    src_all = buf.data.get("source")            # value metrics must EXCLUDE fake-z BC rows (source==1)
     tot_ce = tot_mse = tot_aux = 0.0
-    n = top1_hits = top1_n = sign_hits = 0
+    n = top1_hits = top1_n = sign_hits = val_n = 0
     for s in range(0, len(idx), batch):
         b = idx[s:s + batch]
         bd, pi, z = make_batch(buf, b, device, deck_cond)
         logits, value, aux = net.forward_train(bd)
         tot_ce += policy_ce(logits, pi).item() * len(b)
-        tot_mse += torch.nn.functional.mse_loss(value, z).item() * len(b)
         if aux_heads:
             tot_aux += aux_loss(aux, D.aux_targets(buf, b, device)).item() * len(b)
         n += len(b)
@@ -76,15 +76,20 @@ def evaluate(net: PTCGNet, buf: D.Buffer, idx: np.ndarray, batch: int, device: s
             tgt = pi.argmax(1)
             top1_hits += int((pred[has_tgt] == tgt[has_tgt]).sum())
             top1_n += int(has_tgt.sum())
-        nz = z != 0
-        if nz.any():
-            sign_hits += int((torch.sign(value[nz]) == torch.sign(z[nz])).sum())
+        # value metrics on REAL-outcome rows only (source==0 if present) with nonzero z
+        real = (torch.from_numpy((src_all[b] == 0)).to(device) if src_all is not None
+                else torch.ones(len(b), dtype=torch.bool, device=device))
+        vm = real & (z != 0)
+        if vm.any():
+            tot_mse += torch.nn.functional.mse_loss(value[vm], z[vm]).item() * int(vm.sum())
+            sign_hits += int((torch.sign(value[vm]) == torch.sign(z[vm])).sum())
+            val_n += int(vm.sum())
     return {
         "policy_ce": tot_ce / max(n, 1),
-        "value_mse": tot_mse / max(n, 1),
+        "value_mse": tot_mse / max(val_n, 1),
         "aux_mse": tot_aux / max(n, 1),
         "policy_top1": top1_hits / max(top1_n, 1),
-        "value_sign_acc": sign_hits / max(n, 1),
+        "value_sign_acc": sign_hits / max(val_n, 1),
     }
 
 
@@ -109,6 +114,8 @@ def main() -> int:
                     help="v2: extra buffer (e.g. ladder-BC) merged with --buffer on common keys")
     ap.add_argument("--mask-bc-value", action="store_true",
                     help="train value ONLY on MCTS rows (BC rows have fake all-+1 z → poison the value head)")
+    ap.add_argument("--select", choices=["policy", "value", "sum"], default="policy",
+                    help="checkpoint criterion: policy=top1 (default), value=value_sign_acc, sum=top1+sign")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -194,9 +201,11 @@ def main() -> int:
             run_ce += ce.item() * len(b)
             run_mse += mse.item() * len(b)
         m = evaluate(net, buf, va, args.batch, device, cfg.deck_cond, cfg.aux_heads)
+        crit = ({"policy": m["policy_top1"], "value": m["value_sign_acc"],
+                 "sum": m["policy_top1"] + m["value_sign_acc"]})[args.select]
         star = ""
-        if m["policy_top1"] > best:
-            best = m["policy_top1"]
+        if crit > best:
+            best = crit
             torch.save({"model": net.state_dict(), "config": vars(cfg),
                         "val": m, "epoch": ep}, args.out)
             star = " *"
@@ -208,10 +217,10 @@ def main() -> int:
     meta = {"buffer": os.path.relpath(args.buffer, REPO), "games": buf.n_games,
             "decisions": int(len(buf.game_id)), "epochs": args.epochs,
             "deck_cond": cfg.deck_cond, "aux_heads": cfg.aux_heads,
-            "best_val_top1": best, "dropped_pass_mass": buf.dropped_pass_mass}
+            "select": args.select, "best_val_criterion": best, "dropped_pass_mass": buf.dropped_pass_mass}
     with open(os.path.splitext(args.out)[0] + ".meta.json", "w") as fh:
         json.dump(meta, fh, indent=2)
-    print(f"\nsaved best checkpoint (val top1 {best:.1%}) -> {os.path.relpath(args.out, REPO)}")
+    print(f"\nsaved best checkpoint (select={args.select}, crit {best:.3f}) -> {os.path.relpath(args.out, REPO)}")
     return 0
 
 
