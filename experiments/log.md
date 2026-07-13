@@ -1981,3 +1981,29 @@ the value metric was misleading for EVERY past training run; future gates should
 lever backfired twice (#55/#56); the net_ladder2/3 family is at its ceiling for this deck+approach via these
 levers. **v6 (683.7) is the defensible final ship.** The only un-tried real lever is a STRONGER-than-heuristic
 field pilot (a genuinely competent multi-deck opponent to self-play against) — a large project, not an iteration.
+
+## #57 — NEW FRAMEWORK: clone the champions (expert imitation). Learnability check = VIABLE.
+
+**Date:** 2026-07-12 · Reality check: we rank **2790/4904** (top 57%); the leader is **1272**, top-15 all
+1100–1272; we're ~632–683. Winning needs ~+600 rating — not a pilot tweak but a different TIER. Self-play/
+determinizer levers cap at our own mid-pack level (#52/#54/#55/#56). **Recon (`topdecks.py`): the 1100+ agents
+play ALAKAZAM — the SAME deck we ship** (309 sightings; also Kangaskhan 169, Garchomp 84). So the gap is
+PILOTING, not deck. And our replays are SATURATED with top-tier play (median agent rating **1089**, max 1305).
+**Framework pivot: STOP generating skill (self-play), IMPORT it — clone the top agents (AlphaGo-Lee SL, not
+AlphaZero).**
+
+**Champion-BC dataset (`scripts/build_champion_bc.py`):** clone every groundable (obs→action) decision by a
+≥1000-rated ALAKAZAM agent, win OR lose, z = the champion's REAL game outcome. Because champions play both won
+and lost games, **z is balanced (55/45) — NOT the winner-only all-+1 that poisoned #42's value head** (rows
+tagged SOURCE_MCTS = real value). **767 champion games → 33,108 decisions**, teachers median 1096 / max 1305.
+
+**Learnability check (train deck-cond net, held-out action-match):** top-1 **47.5%** (4.7× the ~10.1% random
+over ~10 legal options), value-sign **65%** (clean). Top-k prior quality (`scripts/eval_topk.py`): **top-2
+64.6%, top-3 72.6%** — the champion's move is in the net's best-3 ~73% of the time → a STRONG MCTS search
+prior. Overfits after ~ep8 on 33k rows → **data-limited** (more top-tier data will lift top-1).
+
+**Verdict: framework VIABLE — the first with a ceiling at the TOP of the board, not our own.** Next: (1) HARVEST
+MORE top-tier (1000+/1100+) Alakazam replays (biggest lever — kills the data limit); (2) export champion.pt →
+ONNX, wire as MCTS prior+value (drop-in v11), GATE vs v6 (net_ladder2) in real games; (3) consider a narrower
+teacher band (1150+/single-best-team) for a more consistent policy. Honest ceiling: BC caps near teacher level
+(~1100–1300) and imperfect cloning lands below — but even ~900–1000 is a top-10% leap from 683.
