@@ -2062,3 +2062,32 @@ open-ended, no guaranteed payoff): (a) QUALITATIVE study of top-agent games — 
 difference, then ENGINEER it (not clone it); (b) loss-mode analysis of how v6 loses to champions → target a
 specific fixable weakness; (c) a fundamentally stronger SEARCH (deeper/better clock use) since the gap is
 compute, not policy. Or (d) accept v6 as a solid mid-pack ship and write up the arc.**
+
+## #60/#61 — Qualitative study + the WIN: we're UNDER-SEARCHING (deeper search = +13–23%)
+
+**Date:** 2026-07-12 · After champion-cloning capped (#59), studied WHAT makes top agents win (not clone).
+
+**Study (`study_top_agents.py`) + loss-mode (`loss_mode.py`):** by rating band, top agents do NOT win faster —
+game length ~14 turns and first-attack ~turn 4–5 at EVERY band; prize trajectory is identical across bands
+(flat to ~t8, then +1/+2 by t12 in wins). The edge is DIFFUSE in-game decision quality (the un-clonable part,
+#59), not tempo/setup/phase. One concrete lead: the 1150+ modal decklist differs (runs Xerosic's Machinations
+×3 + Nighttime Mine ×3; fewer Night Stretcher/Rare Candy) → `candidate_decks/alakazam-toptier.csv`.
+
+**Deck A/B (`gate_deck_ab.py`, top-tier list vs our alakazam-ladder, net_ladder2 pilot, 200 games): NEGATIVE
+— top-tier list 45.5% (our list wins 54.5%).** Our net can't pilot the top-tier tech (Xerosic/Nighttime Mine);
+deck-tech is not a free win. Don't adopt.
+
+**#3 Deeper search (`gate_search.py`, net_ladder2 HI 384 sims vs LO 96 sims, 120 games/opp): POSITIVE + SIG.**
+```
+  vs Kangaskhan : HI 65.0% / LO 41.7%  Δ+23.3%  z=+2.56  DEEPER HELPS
+  vs Alakazam   : HI 66.7% / LO 53.3%  Δ+13.3%  z=+1.49
+```
+**4× sims → +13–23% win rate on our EXISTING net. We are massively UNDER-SEARCHING** — we run ~0.4s/move but
+have a 600 s/game clock (~6% utilized). Refutes the "search caps at leaf quality" prior (#10/#18/#30 were at
+LOW budgets). This is the first large, significant, actionable lever since v6 — and +13–23% offline is well
+above the ladder noise floor (#54), so it could actually MOVE the live rating (unlike the ±5% determinizer).
+
+**→ v11 = v6 (net_ladder2 + Alakazam) with a RAISED search budget** (governor tuned to spend far more of the
+clock: higher routine sims + higher per-move cap). MUST timing-validate (Alakazam games are long; keep worst
+seat-time < 600 s). Gate v11(high-budget) vs v6(current-budget) and ship if it holds. This is the real path:
+we don't need a better net — we need to USE THE CLOCK.
