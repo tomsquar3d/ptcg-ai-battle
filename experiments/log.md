@@ -2091,3 +2091,28 @@ above the ladder noise floor (#54), so it could actually MOVE the live rating (u
 clock: higher routine sims + higher per-move cap). MUST timing-validate (Alakazam games are long; keep worst
 seat-time < 600 s). Gate v11(high-budget) vs v6(current-budget) and ship if it holds. This is the real path:
 we don't need a better net — we need to USE THE CLOCK.
+
+## #62 — v11 SHIPS: v6 + raised search budget (USE THE CLOCK) beats v6 +19.6% (z=+4.33)
+
+**Date:** 2026-07-12 · #61 found we were massively under-searching (~0.4s/move of a 600s clock). v11 = v6
+(net_ladder2 + Alakazam, byte-identical net md5-verified + same deck) EXCEPT the agent raises
+`governor.ROUTINE_S` 0.4→1.5 s (runtime override, v11-only; critical turns already 5s; CRIT_FRACTION cap +
+LOW_CLOCK_S floor keep it provably timeout-safe).
+
+**Timing-validated (`timing_v11.py`):** bank=600 6/6 DONE, worst seat-time **324 s/600 (1.85× margin), 0
+timeouts**; bank=60 stress floored at 18.5 s, 0 timeouts, 0 illegal. (More clock-hungry than v6's ~155–230 s
+— by design; the governor throttle guarantees no overrun, proven by the bank=60 test.)
+
+**Gate v11(deep 384 sims) vs v6(shallow 96 sims), N=120/opp (`gate_search.py`):**
+```
+  vs Grimmsnarl : v11 90.0% / v6 56.7%  Δ+33.3%  z=+4.13
+  vs Garchomp   : v11 60.0% / v6 36.7%  Δ+23.3%  z=+2.56
+  vs Alakazam   : v11 61.7% / v6 48.3%  Δ+13.3%  z=+1.47
+  vs Kangaskhan : v11 53.3% / v6 45.0%  Δ +8.3%  z=+0.91
+  POOLED (240)  : v11 66.2% / v6 46.7%  Δ+19.6%  z=+4.33   SHIP
+```
+**Largest, most significant win over v6 in the whole arc — and +19.6% is ABOVE the ladder noise floor (#54,
+~±12% WR), so it should actually move the live rating** (unlike the ±5% determinizer levers). The gap the
+study called "in-game decision quality" (#60) is, in large part, just search depth we were leaving unused.
+`build_submission _ONNX_SUBDIR["v11"]="ladder2"`. Tarball `submission_v11.tar.gz` **5.4 MB**, torch-free,
+timeout-safe. **v11 READY TO SUBMIT** — the real path was never a better net; it was USING THE CLOCK.
