@@ -2032,3 +2032,33 @@ evals. The champion POLICY is fine (top-3 73%).
 value (if hybrid beats v6net, the champion value head is the culprit and we pair the good champion policy with
 a strong value).** Framework not refuted — v1 is the weakest possible version (least data, weak value, naive
 deploy). Honest: still a string of negatives; reassess if the 2× retrain + hybrid don't move it.
+
+## #59 — Champion-cloning CAPPED at ~47% action-match — behavioral cloning cannot reach the top tier
+
+**Date:** 2026-07-12 · Fixed the harvest's index.json clobber (it kept only the 1031 new episodes → the "2×
+retrain" #58 actually SWAPPED, not doubled). Ratings are now sourced robustly from each replay's own
+`info.TeamNames` → leaderboard (2760/2865 replays map both seats). Rebuilt the FULL corpus:
+**1,718 champion Alakazam games → 75,316 decisions** (2.3× the 33k), balanced z (51%).
+
+**Two decisive experiments — both flat:**
+```
+  clone (33k, mixed)          top-1 47.5%  top-3 72.6%
+  clone (75k, mixed, 2.3x)    top-1 47.5%  top-3 73.4%   <- MORE DATA: no change
+  clone (Majkel1337 #2 team,  top-1 46.3%  top-3 70.2%   <- SINGLE consistent champ: no change
+         11.5k, narrow)
+```
+**~47% top-1 is a HARD ceiling — not data-limited, not the mixture.** Even cloning ONE top-2 agent (1219,
+259 games) caps at 46.3%. Refutes both hypotheses. Reason: a top agent's move is the output of SEARCH/
+computation that BC from a state snapshot cannot infer — our own self-play nets hit 63–76% cloning our MCTS
+(a clean function of the state we control), but an external strong agent's policy isn't a learnable
+state→action function. Combined with #58's hybrid gate (champion policy + v6 value = 50.4% vs v6 55.7%,
+i.e. champion policy ≈ v6), **behavioral cloning yields a ~v6-level policy and CANNOT reach the top tier.**
+
+**LEVER CLOSED.** We have now capped THREE approaches at ~v6/mid-pack: determinizer tuning (#52, below the
+ladder noise floor #54), field self-play (#55/#56, backfired), champion imitation (#57–#59, capped ~47%).
+v6 (683.7, rank ~2790/4904) is our ceiling via all accessible levers. The top agents (1200+) win via
+search/eval/strategy that is NOT recoverable from replays by cloning. **Remaining honest directions (all
+open-ended, no guaranteed payoff): (a) QUALITATIVE study of top-agent games — understand the strategic/combo
+difference, then ENGINEER it (not clone it); (b) loss-mode analysis of how v6 loses to champions → target a
+specific fixable weakness; (c) a fundamentally stronger SEARCH (deeper/better clock use) since the gap is
+compute, not policy. Or (d) accept v6 as a solid mid-pack ship and write up the arc.**

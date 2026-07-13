@@ -34,6 +34,31 @@ from mine_archetypes import _marquee, _slug                                 # no
 _EID = re.compile(r"episode-(\d+)-replay\.json")
 
 
+def _load_leaderboard():
+    """team_name -> current leaderboard score (robust rating source: the harvest clobbers index.json, but
+    each replay's info.TeamNames maps straight to the leaderboard). Returns {} if unavailable."""
+    try:
+        import io as _io, csv as _csv, zipfile as _zip
+        os.environ.setdefault("KAGGLE_CONFIG_DIR", os.path.expanduser("~/.kaggle"))
+        from kaggle import KaggleApi
+        api = KaggleApi(); api.authenticate()
+        d = os.path.join(REPO, "experiments", "_lb_cache"); os.makedirs(d, exist_ok=True)
+        api.competition_leaderboard_download("pokemon-tcg-ai-battle", d)
+        zf = [f for f in os.listdir(d) if f.endswith(".zip")]
+        raw = (_zip.ZipFile(os.path.join(d, zf[0])).read(_zip.ZipFile(os.path.join(d, zf[0])).namelist()[0]).decode()
+               if zf else open(os.path.join(d, [f for f in os.listdir(d) if f.endswith(".csv")][0])).read())
+        out = {}
+        for r in _csv.DictReader(_io.StringIO(raw)):
+            try:
+                out[r["TeamName"]] = float(r["Score"])
+            except Exception:
+                pass
+        return out
+    except Exception as e:
+        print(f"  (leaderboard load failed: {e}; falling back to index.json ratings)")
+        return {}
+
+
 def clone_seat(steps, seat, ci, ai, deck, result):
     """Clone `seat`'s groundable single-select decisions; z from the game `result` (real champion outcome)."""
     ds = F.summarize_deck(deck, ci)
@@ -96,11 +121,14 @@ def main() -> int:
     ap.add_argument("--out", default=os.path.join(REPO, "experiments", "selfplay", "champion_bc"))
     ap.add_argument("--min-rating", type=float, default=1000.0)
     ap.add_argument("--archetype", default="alakazam")
+    ap.add_argument("--team", default=None, help="clone ONLY this team's seat (narrow, consistent teacher)")
     ap.add_argument("--limit", type=int, default=0)
     args = ap.parse_args()
 
     ci = {c.cardId: c for c in all_card_data()}
     ai = {a.attackId: a for a in all_attack()}
+    lb = _load_leaderboard()
+    print(f"  leaderboard ratings loaded: {len(lb)} teams")
     idx = json.load(open(os.path.join(args.replays, "index.json")))["index"] \
         if os.path.exists(os.path.join(args.replays, "index.json")) else {}
     files = sorted(f for f in os.listdir(args.replays) if f.endswith("-replay.json"))
@@ -111,6 +139,7 @@ def main() -> int:
     n_seats = total_rows = wins = losses = 0
     ratings = []
     zbal = Counter()
+    team_rows = Counter()
     for i, fn in enumerate(files, 1):
         try:
             d = json.load(open(os.path.join(args.replays, fn)))
@@ -121,15 +150,21 @@ def main() -> int:
             continue
         result = 0 if rew[0] > rew[1] else 1
         eid = (_EID.search(fn) or [None, None])[1]
+        # rating source: replay info.TeamNames -> leaderboard (robust); fallback index.json by reward
+        team_names = (d.get("info") or {}).get("TeamNames") or [None, None]
         agents = (idx.get(eid, {}) or {}).get("agents", [])
         r_by_reward = {a.get("reward"): a.get("rating") for a in agents}
         for seat in (0, 1):
-            r = r_by_reward.get(rew[seat])
+            tname = team_names[seat] if seat < len(team_names) else None
+            r = lb.get(tname) or r_by_reward.get(rew[seat])
             if not r or r < args.min_rating:
+                continue
+            if args.team and tname != args.team:
                 continue
             deck = _recover_deck(steps, seat)
             if not deck or _slug(_marquee(deck, ci)) != args.archetype:
                 continue
+            team_rows[tname] += 1
             try:
                 tup = clone_seat(steps, seat, ci, ai, deck, result)
             except Exception:
@@ -154,6 +189,9 @@ def main() -> int:
     print(f"  teacher ratings: n={len(ratings)} min={r.min():.0f} median={np.median(r):.0f} "
           f"p90={np.percentile(r,90):.0f} max={r.max():.0f}")
     print(f"  avg decisions/game: {total_rows/max(n_seats,1):.0f}")
+    print("  top teacher-teams by champion-game count (for a narrow --team clone):")
+    for tn, c in team_rows.most_common(8):
+        print(f"    {c:4d}  {tn}")
     return 0
 
 
