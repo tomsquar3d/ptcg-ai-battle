@@ -2007,3 +2007,28 @@ MORE top-tier (1000+/1100+) Alakazam replays (biggest lever — kills the data l
 ONNX, wire as MCTS prior+value (drop-in v11), GATE vs v6 (net_ladder2) in real games; (3) consider a narrower
 teacher band (1150+/single-best-team) for a more consistent policy. Honest ceiling: BC caps near teacher level
 (~1100–1300) and imperfect cloning lands below — but even ~900–1000 is a top-10% leap from 683.
+
+## #58 — Champion-clone v1 gate = LOSS (data-limited); harvest doubled the corpus → retrain path
+
+**Date:** 2026-07-12 · Exported champion.pt→ONNX, gated as an MCTS guide vs net_ladder2 (v6's net), Alakazam
+pilot, N=140/opp:
+```
+  mirror Alakazam : champ 38.6% / v6net 54.3%  Δ−15.7%
+  vs Kangaskhan   : champ 24.3% / v6net 44.3%  Δ−20.0%  z=−2.49
+  vs Garchomp     : champ 44.3% / v6net 45.7%  Δ−1.4%
+  vs Grimmsnarl   : champ 52.9% / v6net 67.1%  Δ−14.3%
+  ALL POOLED      : champ 40.0% / v6net 52.9%  Δ−12.9%  z=−3.05  (WORSE)
+```
+**Champion-clone v1 (33k rows) loses to net_ladder2 as a full MCTS guide.** Two reasons, both addressable:
+(1) DATA-LIMITED — the clone is 48% top-1 and overfit at 33k rows (#57); (2) the likely weak link is the
+VALUE head (65% sign, 33k rows) vs net_ladder2's self-play value — in MCTS a weak value head corrupts leaf
+evals. The champion POLICY is fine (top-3 73%).
+
+**HARVEST SUCCEEDED — big:** `harvest_ladder.py --top-teams 40` pulled **+1031 new replays → 2,865 total**
+(from 1,834), nearly DOUBLING the corpus. Directly attacks the data limit.
+
+**Next: (a) rebuild champion-BC on the 2× corpus (→ ~60k+ decisions) + retrain → higher-fidelity clone;
+(b) HYBRID diagnostic — champion POLICY prior + net_ladder2 VALUE — to isolate whether the loss is policy or
+value (if hybrid beats v6net, the champion value head is the culprit and we pair the good champion policy with
+a strong value).** Framework not refuted — v1 is the weakest possible version (least data, weak value, naive
+deploy). Honest: still a string of negatives; reassess if the 2× retrain + hybrid don't move it.
