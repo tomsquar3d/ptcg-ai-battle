@@ -2116,3 +2116,127 @@ timeouts**; bank=60 stress floored at 18.5 s, 0 timeouts, 0 illegal. (More clock
 study called "in-game decision quality" (#60) is, in large part, just search depth we were leaving unused.
 `build_submission _ONNX_SUBDIR["v11"]="ladder2"`. Tarball `submission_v11.tar.gz` **5.4 MB**, torch-free,
 timeout-safe. **v11 READY TO SUBMIT** — the real path was never a better net; it was USING THE CLOCK.
+
+## #63 — Root skill-prior (v12 = v11 + turn-plan/KO-target prior at the MCTS roots): INERT on Alakazam, NO SHIP
+
+**Date:** 2026-07-18/19 · Implements the `data/v8/` "skill prior at the MCTS roots" brief. The brief was
+**stale** — it targeted `submissions/v8/` + experiment `#45`, both long since taken (v8 shipped #47; #45 =
+v7's bundle; champion is now v11, #62). Rebuilt the brief's *mechanism* on the current champion as
+**v12 = v11 + a `lam`-blended root prior**, logged here as **#63**. No existing submission or log entry was
+overwritten.
+
+**What v12 is.** A hand-authored turn-plan / KO-target decision tree (`src/search/skill_prior.py`) turned
+into a prior distribution over the root's legal options, blended with the net prior by one scalar:
+`P = (1-lam)·net + lam·skill`, applied at the **K MCTS root nodes only** via a new
+`mcts.search(root_prior_fn=...)` seam (interior nodes and `_select`/`_value` untouched). `PTCG_SKILL_LAM`
+(default 0.5) is the single knob; **`lam=0` reproduces v11 exactly** (root_prior_fn=None — verified: the only
+v11→v12 agent.py diffs are the lam-guarded additions). Vendors torch-free, bundle 9.3 MB.
+
+**The decisive finding — the KO tree is structurally inert on the shipped Alakazam deck.** Alakazam's only
+attack, "Powerful Hand" (id 1072), has printed **`damage=0`** (real damage = 2 counters per card in hand,
+hand-size-scaling). `threat.attack_potential` does not parse text/conditional damage, so it reads Alakazam's
+output as 0. Since the deck wins *through* Alakazam, the prior's reachable-KO set is ~always empty and
+`turn_plan` returns `develop` on essentially every root — **regardless of play strength**:
+
+```
+skill_agreement.py play mode      roots   intent histogram                              KO-branch roots
+random-vs-random  (30g)           2320    {develop: 2320}                               0
+greedy-vs-greedy  (30g)           1879    {develop:1854, efficient_single:20, gust:5}   25  (1.3%)
+net-MCTS-vs-net-MCTS (15g)        1186    {develop: 1186}                               0
+```
+
+Only the deck's flat-damage secondaries (Dudunsparce 90 / Kadabra 30 / Dunsparce 20) ever fire the KO tree,
+and only under greedy noise; at champion strength it is 100% `develop`.
+
+**Agreement (net top-prior vs skill top, net_ladder3 ref).** Overall 50–57% depending on play mode — but this
+is **not** the KO signal the brief's gate wanted: with 99–100% `develop`, `_intent_bonus` never triggers and
+`skill(lam=1)` collapses to a one-ply-leaf-value argmax. The recurring `net_top=0 / skill_top=high-index`
+disagreement is "net policy vs shallow-value greedy," not the prize-trade decisions the tree targets. The
+non-develop slice (where the tree *does* fire) is only ~25 roots — too few to gate on.
+
+**Nuance — the A/B is still not a no-op.** Even in `develop`, the *mechanism* blends a one-ply-value
+distribution into the root prior (net argmax ≠ skill argmax on ~44% of roots), so lam>0 shifts root
+exploration on ~every turn. The A/B therefore tests "does blending shallow-value into the champion's root
+prior help?" — run on two mirrors at a reduced (shallow) budget where a root prior has maximum influence
+(`gate_skill_prior.py`; both seats identical except lam; CRITICAL_S 5→0.3, K 8→2, ROUTINE_S 0.1; A win% =
+decisive-game rate, Wilson 95% CI; N=40/config):
+
+**Alakazam mirror (the shipped deck — KO tree inert):**
+```
+ lam_A  lam_B    A W/L/D    A win%   95% CI      A ms
+  0.0    0.0    19/21/0     47.5%   [33, 63]     139    <- anchor: TIES v11 ✓ (wiring clean)
+  0.3    0.0    17/23/0     42.5%   [29, 58]     138
+  0.5    0.0    22/18/0     55.0%   [40, 69]     136
+  0.7    0.0    12/28/0     30.0%   [18, 45]     129    <- SIGNIFICANTLY WORSE (CI clears 50)
+```
+No lam beats v11; high lam actively HURTS — at lam=0.7 the prior overrides the trained net prior with a
+shallow one-ply-value blend that carries no real KO signal on this deck, degrading play (30%, z<−2).
+
+**Dragapult-ex mirror (flat-damage + 2-prize ex targets — KO tree DOES fire, ~4% of roots incl. `direct_ko`;
+v12's net is Alakazam-trained → OOD here, but shared by both seats so the lam comparison is fair):**
+```
+ lam_A  lam_B    A W/L/D    A win%   95% CI      A ms
+  0.0    0.0    20/20/0     50.0%   [35, 65]     158    <- anchor: TIES ✓
+  0.3    0.0    20/20/0     50.0%   [35, 65]     152
+  0.5    0.0    21/19/0     52.5%   [37, 67]     149
+  0.7    0.0    23/17/0     57.5%   [42, 71]     156
+```
+Here lam trends **monotonically UP** (50→50→52.5→57.5) — the opposite sign from Alakazam's lam=0.7→30%
+collapse. Nothing clears 50% at N=40 (still a null by the strict gate), but the contrast is the finding: the
+root value-blend is net-negative when it carries no KO signal (Alakazam) and neutral-to-slightly-positive when
+the KO tree actually fires (Dragapult, where it hits ~4% of roots incl. 2-prize `direct_ko`). **The prior's
+design is not broken — it is starved of KO opportunities on the deck we ship.**
+
+**Sanity anchor holds** (lam=0 ties on both mirrors — the wiring does not leak; `lam=0` is v11 exactly). Prior
+overhead is negligible (~few ms/move; the added per-move pass is O(#options), empirically the lam>0 rows are
+if anything *faster* — 129–138 ms vs 139 ms at lam=0 — i.e. well under any timeout concern).
+
+**Decision: NO SHIP; keep as infra.** Per the brief's own gate (accept only if some lam beats the base with a
+CI clear of 50% AND ≥ base vs sample), v12 is REJECTED: no lam clears 50% on the shipped deck and lam=0.7 is
+significantly worse. The KO-target half of the prior cannot even be *evaluated* on what we ship — root cause
+is the deck (Powerful Hand's win condition is invisible to the v1 damage model), not the prior's wiring.
+
+**The unlock, if revisited:** teach `threat.attack_potential` about Powerful Hand (damage ≈ 20 × hand size,
+capped), which would make the KO tree fire and give the prior something to bias toward — OR apply the prior to
+a deck whose main attacker has flat/parseable damage. Until then the KO-target half of the prior cannot be
+evaluated on what we ship. Module + seam + `gate_skill_prior.py` + `--mcts/--greedy` agreement modes retained
+as infra; rollback is `PTCG_SKILL_LAM=0` (or delete submissions/v12). Files: `src/search/skill_prior.py`,
+`src/search/mcts.py` (root_prior_fn), `submissions/v12/`, `scripts/{skill_prior_smoke,skill_agreement,gate_skill_prior}.py`.
+
+### #63b — Follow-up prototype: the "Powerful Hand" damage fix does NOT rescue the prior (2026-07-19)
+
+Tested the #63 unlock hypothesis directly. Taught the damage model about hand-scaling attacks:
+`ptcg/threat.py` `_scaled_damage()` (name-keyed, reprint-robust) resolves **Powerful Hand = 20 × hand_size**
+(counter placement → ignores weakness/resistance); `attack_potential`/`_best_damage` gained an optional
+`context` arg (default None ⇒ printed-damage behaviour EXACTLY unchanged, so evaluator/governor are
+untouched). `skill_prior._reachable` threads our hand size in. Rebuilt v12.
+
+**Mechanically it works** — the KO tree now sees Alakazam's win condition and fires where it was 100% dead:
+```
+Alakazam intent histogram   KO-branch roots (was 0% / ~1%)
+  net-MCTS (5g, 320 roots)   ~6%  {gust_support:12, snipe:4, efficient_single:3}
+  greedy   (6g, 300 roots)   ~8%  {efficient_single:20, gust_support:4}
+```
+Unit-checked: hand=7 → 140 dmg (KOs 140 HP); no context → 0 (backward-compatible).
+
+**But the A/B is a STRONGER no-ship** — firing the KO tree made the prior HURT more, not less:
+```
+Alakazam mirror, N=40/config    pre-fix       post-fix
+  lam 0.0 (anchor)              47.5%         50.0%  [35,65]  ties ✓
+  lam 0.3                       42.5%         42.5%  [29,58]
+  lam 0.5                       55.0%         27.5%  [16,43]  <- SIGNIFICANTLY WORSE (was ~55%)
+  lam 0.7                       30.0%         42.5%  [29,58]
+```
+When the hand-authored KO-targeting heuristic actually engages, its picks are **worse than the trained net's**
+(lam=0.5 → 27.5%, CI clears 50). Likely mechanism the fix exposed: the tree estimates Powerful Hand damage
+from the **current** hand, but you attack *after* playing your turn (hand shrinks), so it **overestimates**
+reachable KOs and the `_intent_bonus` over-commits to plays that don't pan out. Deeper cause is the arc's
+recurring lesson (#57–59): a shallow hand-authored rule cannot out-decide the net at the root.
+
+**Decision: skill prior REMAINS no-ship; do not pursue further tuning** (hand-decay correction, bonus retune) —
+a significantly-negative result on the deck we ship won't flip, and the heuristic-vs-net gap is the real wall.
+**Keep the `threat.py` damage fix** — it's a backward-compatible, generally-correct improvement (Powerful Hand
+was silently 0 everywhere). Independent, untested follow-up lever: wire the same `context` into the governor's
+`is_critical` so Powerful-Hand KO turns are flagged critical → deeper search on the right turns (a v11-style
+"use the clock on the decisive turn" gain, orthogonal to the prior). Files added: `ptcg/threat.py`
+(`_scaled_damage` + `context`), `search/skill_prior.py` (hand-size threading); v12 rebuilt.

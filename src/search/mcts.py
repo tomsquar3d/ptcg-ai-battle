@@ -201,7 +201,8 @@ def _simulate(root: "_Node", root_player: int, c_puct: float,
 def search(obs: Any, worlds: Sequence[tuple], card_index: Mapping, attack_index: Mapping, *,
            sims: int = 800, c_puct: float = C_PUCT, prior_fn: Callable = uniform_prior,
            value_fn: Optional[Callable] = None,
-           deadline: Optional[float] = None) -> tuple[Optional[list[int]], dict]:
+           deadline: Optional[float] = None,
+           root_prior_fn: Optional[Callable] = None) -> tuple[Optional[list[int]], dict]:
     """Run determinized MCTS over the K `worlds` and return (pick, stats). `pick` is the engine
     select list for the root decision (a single option index, or [] for pass). Aggregates root
     visit counts across worlds and returns the most-visited (robust) action.
@@ -212,6 +213,16 @@ def search(obs: Any, worlds: Sequence[tuple], card_index: Mapping, attack_index:
     root_player = obs.current.yourIndex
     roots = [_Node(search_begin(obs, *w), root_player, card_index, attack_index, value_fn)
              for w in worlds]
+    if root_prior_fn is not None:                    # root-only skill prior; interior nodes unchanged
+        for r in roots:
+            if not r.terminal and r.actions:
+                try:
+                    base = prior_fn(r) if prior_fn else None
+                    p = root_prior_fn(obs, r, card_index, attack_index, base_prior=base)
+                    if isinstance(p, dict) and all(a in p for a in r.actions):
+                        r.P = p                      # else leave r.P = None -> lazy prior_fn (safe)
+                except Exception:
+                    pass
     try:
         done = 0
         for i in range(sims):
