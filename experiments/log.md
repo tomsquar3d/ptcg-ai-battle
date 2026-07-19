@@ -2240,3 +2240,38 @@ was silently 0 everywhere). Independent, untested follow-up lever: wire the same
 `is_critical` so Powerful-Hand KO turns are flagged critical → deeper search on the right turns (a v11-style
 "use the clock on the decisive turn" gain, orthogonal to the prior). Files added: `ptcg/threat.py`
 (`_scaled_damage` + `context`), `search/skill_prior.py` (hand-size threading); v12 rebuilt.
+
+## #64 — Diminishing-returns gate (640 vs 384 sims): the search-budget lever is CLOSED at v11
+
+**Hypothesis.** #61/#62 showed we were under-searching: 4× the routine budget (96→384 sims, ROUTINE_S
+0.4→1.5 s) beat v6 by +19.6% (z=+4.33) and shipped as v11. If the curve were still steep, another
+step (384→640) would buy more, justifying a budget-bump v12.
+
+**Method.** `scripts/gate_search.py`, same net (net_ladder2), same deck, same K — only sims vary.
+4 opponent archetypes. One run was killed by session teardown at 170 games/side; a fresh-seed
+continuation added 200/side. Pooled below (independent seeds, so poolable).
+
+```
+opponent                 640 sims   384 sims    delta
+alakazam                   68.0%      68.0%      +0.0
+mega-kangaskhan-ex         56.0%      54.0%      +2.0
+cynthia-s-garchomp-ex      56.0%      48.0%      +8.0
+marnie-s-grimmsnarl-ex     66.0%      84.0%     -18.0   (z=-2.08, deeper HURTS)
+POOLED             233/370=63.0%  224/370=60.5%  +2.4%   (z=+0.68)
+```
+
+**Result: NEGATIVE — no further headroom.** +2.4% (z=+0.68) vs the +19.6% (z=+4.33) the previous 4×
+jump bought. Textbook log-shaped MCTS return curve flattening into the **leaf-quality ceiling**: past
+some point extra sims only resolve the *net's own value error* more precisely, they don't find better
+play. One matchup regressed significantly, consistent with deeper search converging harder onto a
+mis-valued line.
+
+**Decision: do NOT build a budget-bump v12.** Two independent reasons: (1) +2.4% is far below the
+ladder's ~±12% WR resolution floor (#54) — the same dead zone that swallowed the determinizer levers
+and v10, so it would be invisible live even if real; (2) it costs timeout margin (v11 already spends
+~324 s of the 600 s clock). **v11 sits at the search-budget ceiling.** Raising the budget further is a
+closed lever — reopen only if the *leaf* (net) improves, which is what would lift the ceiling.
+
+**Standing lesson (adds to #54).** Offline-significant is not ladder-visible. Gate every candidate
+against the noise floor *before* spending a submission slot: an effect under ~12% WR cannot be
+measured on the ladder no matter how many offline games back it.
