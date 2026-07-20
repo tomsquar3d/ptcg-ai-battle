@@ -2314,6 +2314,18 @@ Cost of the lesson: this gate read "dead tie" at N=40 and "+10%, ns" at N=160 be
    1.5/5.0 (ratio 3.3×). #64 showed the returns curve is already flat at 1.5 s routine, so the real-config
    effect is plausibly SMALLER than measured. The gate proves mechanism + direction, not ship magnitude.
 
-**Next (tomorrow):** (a) finish `timing_v13.py` — game 0 clean (seat-time ≤211.3 s, banks 405/389 of 600),
-needs all 6 games + the never-negative assertion; (b) **re-run the A/B at the true 1.5/5.0 config** before
-spending a submission slot. Ship only if timing passes AND the effect survives at ship budget.
+**TIMING: PASSES** (`scripts/timing_v13.py`, v13-vs-v13 = heaviest case, 600 s/seat draining bank):
+```
+games DONE 6/6 | illegal 0 | moves 944 | TIMEOUTS 0
+worst seat-time in a game: 394.9s (of 600.0s) | min bank 205.1s | max single move 5355 ms
+net loaded ✓ deck-conditioned ✓ torch-free ✓
+```
+Max single move 5355 ms ≈ the 5 s CRITICAL_S budget + overhead, exactly as designed; CRIT_FRACTION
+(≤10% of remaining clock) + LOW_CLOCK_S hold despite criticals going 12%→~35% of turns. Note v13 does
+spend MORE clock than v11 (worst 394.9 s vs v11's ~324 s) — 205 s of margin left, safe but tighter.
+
+**Next:** ship decision still gated on ONE thing — **re-run the A/B at the true 1.5/5.0 ship budget**.
+The +13.1% was measured at the 0.4/2.0 proxy (critical:routine = 5×); at ship settings the ratio is
+3.3× and #64 shows the returns curve is already flat at 1.5 s routine, so the effect may shrink. Use
+the #65 methodology: ≥8 replicates/arm incl. an identical-agent anchor, Welch on replicate means,
+run in parallel across the 10 cores. Ship only if it survives there.
