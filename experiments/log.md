@@ -2275,3 +2275,45 @@ closed lever — reopen only if the *leaf* (net) improves, which is what would l
 **Standing lesson (adds to #54).** Offline-significant is not ladder-visible. Gate every candidate
 against the noise floor *before* spending a submission slot: an effect under ~12% WR cannot be
 measured on the ladder no matter how many offline games back it.
+
+## #65 — v13 (Powerful-Hand-aware governor) = the first POSITIVE lever since v11. Ship decision PENDING.
+
+**Hypothesis (the #63 follow-up).** #63's `threat.py` fix made Powerful Hand (printed 0, real 20×hand)
+resolve correctly. Wire that same `context` into `governor.is_critical` so our *actual* KO turns are
+flagged critical instead of looking like 0-damage routine turns. Not "out-think the net at the root"
+(that was #63's failure) — just aim the clock at the decisive turns. Same shape as v11's win, the only
+lever that has ever cleared the noise floor.
+
+**Method.** `scripts/gate_governor.py`, Alakazam mirror, v13/agent.py loaded twice with `_PH_CRIT`
+toggled per seat — same net, deck, budget, so the governor is the ONLY difference. Seats alternate
+(`a_seat = g % 2`). Run at a scaled-down `ROUTINE_S=0.4 / CRITICAL_S=2.0 / K=4` proxy for speed.
+**9 replicates × 40 games per arm = 720 games.**
+
+```
+arm                          pooled        replicate mean ± SD (n=40 each)
+TEST   (True,False) v13/v11  205/360=56.9%   56.94% ± 7.26
+ANCHOR (False,False) v11/v11 158/360=43.9%   43.89% ± 10.91
+delta                        +13.1%          Welch t=+2.99 df=13.9  -> SIGNIFICANT
+```
+Mechanism confirmed engaged, not inert (the #63 failure mode): mean move time 711 ms -> ~1150 ms
+(+62%), and TEST replicates ran ~25% longer in wall-clock than ANCHOR. Criticals go 12% -> ~35% of turns.
+
+**METHODOLOGY FINDING (applies retroactively to this whole log).** Nine identical-agent ANCHOR
+replicates ranged **30.0% – 57.5%**. Binomial SD at n=40 is 7.9%; observed 10.9% = **1.38× over-dispersed**.
+Games are NOT iid across runs. Therefore *single-run N=40–120 gates judged on binomial CIs have been
+systematically over-confident* — including several earlier "significant" calls here. **New standard:
+replicate the gate and test replicate means (Welch), never pool one run's games into a binomial z.**
+Cost of the lesson: this gate read "dead tie" at N=40 and "+10%, ns" at N=160 before resolving at N=720.
+
+**Caveats — why this is not yet a ship.**
+1. **Anchor sat at 43.9%, not the 50% identical agents must average** (t=-1.68 df=8, ns, so the tie
+   formally holds — but low). Effect size therefore depends on baseline: **+13.1% vs the measured
+   anchor**, or **+6.9% vs a theoretical 50%** (that one is independently significant too, t=+2.87
+   df=8, p≈0.02). True effect is somewhere in **+7% .. +13%**, straddling the ~±12% ladder floor (#54/#64).
+2. **Gate budget ≠ ship budget.** Gate ran 0.4/2.0 (critical:routine = 5×); v13 ships at v11's
+   1.5/5.0 (ratio 3.3×). #64 showed the returns curve is already flat at 1.5 s routine, so the real-config
+   effect is plausibly SMALLER than measured. The gate proves mechanism + direction, not ship magnitude.
+
+**Next (tomorrow):** (a) finish `timing_v13.py` — game 0 clean (seat-time ≤211.3 s, banks 405/389 of 600),
+needs all 6 games + the never-negative assertion; (b) **re-run the A/B at the true 1.5/5.0 config** before
+spending a submission slot. Ship only if timing passes AND the effect survives at ship budget.

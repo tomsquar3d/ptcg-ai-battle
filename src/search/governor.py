@@ -37,9 +37,15 @@ class Budget:
     k: int
 
 
-def is_critical(game_state: Any, card_index: Mapping, attack_index: Mapping) -> bool:
+def is_critical(game_state: Any, card_index: Mapping, attack_index: Mapping,
+                ph_critical: bool = True) -> bool:
     """Prize-path critical-turn triggers: a KO is on the table, we're under a KO (race swing), or
-    the game is in its prize endgame. Cheap — reuses the threat damage model."""
+    the game is in its prize endgame. Cheap — reuses the threat damage model.
+
+    `ph_critical` (default True): resolve hand-scaling attacks (Alakazam's Powerful Hand = 20×hand,
+    printed 0) via the attacker's hand size, so our deck's actual KO turns are seen as critical rather
+    than treated as 0-damage routine turns and under-searched (#63c). False = the pre-#63c behaviour
+    (printed damage only), for the A/B baseline. hand_count is visible for both players."""
     me, opp = game_state.me, game_state.opponent
     # endgame: few prizes left to take. Guard >0 — prize_count is 0 only pre-deal (setup) or on a
     # win, so 0 would else make every setup decision falsely "critical".
@@ -48,19 +54,23 @@ def is_critical(game_state: Any, card_index: Mapping, attack_index: Mapping) -> 
     my_a, opp_a = me.active, opp.active
     if my_a is None or opp_a is None:
         return False
-    our_now, _, _ = attack_potential(my_a, opp_a, card_index, attack_index)
-    thr_now, _, _ = attack_potential(opp_a, my_a, card_index, attack_index)
+    our_ctx = {"attacker_hand_size": getattr(me, "hand_count", 0) or 0} if ph_critical else None
+    opp_ctx = {"attacker_hand_size": getattr(opp, "hand_count", 0) or 0} if ph_critical else None
+    our_now, _, _ = attack_potential(my_a, opp_a, card_index, attack_index, context=our_ctx)
+    thr_now, _, _ = attack_potential(opp_a, my_a, card_index, attack_index, context=opp_ctx)
     ko_available = opp_a.hp > 0 and our_now >= opp_a.hp     # we can take a prize this turn
     under_threat = my_a.hp > 0 and thr_now >= my_a.hp       # they can take one back — a swing
     return ko_available or under_threat
 
 
-def allocate(game_state: Any, time_left: Any, card_index: Mapping, attack_index: Mapping) -> Budget:
-    """Decide the search budget for the current decision from the remaining clock + criticality."""
+def allocate(game_state: Any, time_left: Any, card_index: Mapping, attack_index: Mapping,
+             ph_critical: bool = True) -> Budget:
+    """Decide the search budget for the current decision from the remaining clock + criticality.
+    `ph_critical` is forwarded to `is_critical` (see there)."""
     if time_left is not None and time_left < LOW_CLOCK_S:
         return Budget("instant", 0.0, 0)
     clock = float(time_left) if time_left is not None else 600.0
     cap = clock * CRIT_FRACTION
-    if is_critical(game_state, card_index, attack_index):
+    if is_critical(game_state, card_index, attack_index, ph_critical):
         return Budget("mcts", max(min(CRITICAL_S, cap), ROUTINE_S), CRITICAL_K)
     return Budget("mcts", min(ROUTINE_S, cap), ROUTINE_K)

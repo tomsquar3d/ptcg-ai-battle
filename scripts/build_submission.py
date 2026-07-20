@@ -16,7 +16,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Per-version ONNX source (subdir under experiments/checkpoints). Default = the checkpoints root (v5).
-_ONNX_SUBDIR = {"v6": "ladder2", "v7": "ladder3", "v8": "ladder3", "v9": "ladder3", "v10": "ladder2", "v11": "ladder2", "v12": "ladder2"}  # v8 = v7 net + re-mined templates; v9 = v8 + per-world posterior sampling; v10 = v6's net_ladder2 + templates + sampling; v11 = v6 + raised search budget (use the clock); v12 = v11 + root skill-prior (net_ladder2)
+_ONNX_SUBDIR = {"v6": "ladder2", "v7": "ladder3", "v8": "ladder3", "v9": "ladder3", "v10": "ladder2", "v11": "ladder2", "v12": "ladder2", "v13": "ladder2"}  # v8 = v7 net + re-mined templates; v9 = v8 + per-world posterior sampling; v10 = v6's net_ladder2 + templates + sampling; v11 = v6 + raised search budget (use the clock); v12 = v11 + root skill-prior (net_ladder2); v13 = v11 + Powerful-Hand-aware governor (net_ladder2)
 
 
 def build(version: str) -> None:
