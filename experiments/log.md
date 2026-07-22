@@ -2356,3 +2356,64 @@ lever that vanishes at the real operating point. Direction+mechanism at a proxy 
 **This closes the last pilot-side lever.** Search budget (#64) and critical-turn allocation (#65) are
 both exhausted at v11's point. The binding constraint is now **the net's leaf value**, not the search
 machinery. Next real push = net quality (flywheel gen #2 / retrain), not more clock or more triggers.
+
+## #66 — THE CLOCK THESIS IS REFUTED: top agents beat us using ~1-3% of the clock. We use 33-66%.
+
+**Date:** 2026-07-22 · Free measurement, no new games played. Motivated by a question about porting gates
+to Kaggle GPUs: our search budget is defined in WALL-CLOCK, so achieved search DEPTH depends on the
+machine — which makes "what operating point do we actually gate at, vs deploy at?" a first-class question.
+Chasing it turned up something much bigger.
+
+**Method.** Kaggle replay JSONs record `remainingOverageTime` per step per agent. The spec: *"Total remaining
+banked time (seconds) that can be used in excess of per-step actTimeouts"*, default 600, and the episode
+config is **`actTimeout: 0`** — so there is NO free per-step allowance and **every second of agent thinking
+draws from the 600 s bank**. Therefore consecutive-step deltas ARE agent think time, measured on the real
+Kaggle 2-vCPU runtime. Harvested corpus: 2,865 replays (skewed to top teams by harvest design, #57/#58).
+
+```
+1,687 RATED agent-games          median clock used     % of 600s bank    median s/move
+rating 1000-1099   n= 586                  6.7s              1.1%            0.036s
+rating 1100-1199   n=1032                 15.2s              2.5%            0.047s
+rating 1200-1299   n=  60                  2.8s              0.5%            0.031s
+TOP TIER >=1150    n= 485                 19.6s              3.3%
+--------------------------------------------------------------------------------
+OURS (timing_v*.py, worst seat-time)
+v6                                       200.6s             33%
+v11                                        324s             54%
+v13                                      394.9s             66%
+```
+
+**The finding.** The 1200+ agents — the ones at rank 1-15 while we sit ~2790 — decide a move in **~31 ms**
+and finish a whole game on **2.8 s** of clock. We spend **200-400 s**. That is **70-140x more compute for a
+far worse result.** Within the top bands, more clock is if anything ANTI-correlated with rating (1100-1199
+uses 15.2 s at a LOWER rating than 1200-1299's 2.8 s).
+
+**This refutes the #60/#61 "we are under-searching" thesis** that motivated v11, v12, v13 and v14. #60/#61
+were not wrong about the offline fact (384 vs 96 sims really is +13-23% in self-play A/B). They were wrong
+about the INFERENCE: self-play A/B rewards compute because both sides share our value function, so deeper
+search finds better moves *with respect to our own eval*. The ladder rewards decision quality, which the top
+agents get from something other than search volume.
+
+**It also gives the 0-for-4 offline->live record a mechanism, and explains v11's live DECLINE** (683.7 -> 599.1
+over 217 games, #live). With a mediocre value head, deeper search optimizes a wrong objective more faithfully
+— it amplifies value-head error rather than averaging it out. That is consistent with #64's flat returns
+curve and #65's leaf-quality reading: **the binding constraint has been the net's leaf value all along, and
+every lever we have pulled since v6 has been adding compute on top of that constraint.**
+
+**Consequences.**
+1. **v14 is very likely dead on arrival** and its gate was NOT resumed. v14 reallocates clock toward critical
+   turns and spends MORE total clock; the evidence says clock is not the axis. Built + committed (`6f7fb8e`),
+   gate harness ready, but running it is low expected value.
+2. **STOP optimizing search/clock.** Levers now closed: determinizer (#52/#54), field self-play (#55/#56),
+   champion imitation (#57-#59), search budget (#64), critical-turn allocation (#65), and now the whole
+   clock axis (#66).
+3. **v6 (683.7) stands as the final ship** — and notably v6 is the LEAST compute-hungry of our recent agents.
+4. **Writeup gold.** "We spent four submissions optimizing compute, then measured the champions and found
+   they use 1% of it" is a genuine, quantified, self-critical result — exactly what the strategy prize asks for.
+
+**Standing lesson (supersedes the #60/#61 framing).** A self-play A/B cannot tell you whether a lever matters
+on the ladder, because both arms share your value function. Before optimizing a resource, MEASURE WHAT THE
+STRONGER AGENTS SPEND ON IT. That measurement cost zero games and was available from day one.
+
+Tools: `scripts/probe_sims.py` (achieved sims/move by budget class; local solo = 521 sims routine @0.4 s,
+5311 critical @5 s, ~1.0-1.3k sims/s single-core).
