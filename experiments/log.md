@@ -2329,3 +2329,30 @@ The +13.1% was measured at the 0.4/2.0 proxy (critical:routine = 5×); at ship s
 3.3× and #64 shows the returns curve is already flat at 1.5 s routine, so the effect may shrink. Use
 the #65 methodology: ≥8 replicates/arm incl. an identical-agent anchor, Welch on replicate means,
 run in parallel across the 10 cores. Ship only if it survives there.
+
+**RESOLUTION (2026-07-21) — v13 is a NO-SHIP. The +13.1% did not survive the ship budget.**
+Re-ran the A/B at the true ship config (`ROUTINE_S=1.5 / CRITICAL_S=5.0 / K=8`),
+`scripts/_gate_gov_ship.py`, **10 replicates × 20 games/arm = 200/arm**, launched 10-wide across the box.
+
+```
+arm                          pooled        replicate mean ± SD (n=20 each)
+TEST   (True,False) v13/v11  102/200=51.0%   51.0% ± 11.0   [50,45,60,45,60,40,30,60,55,65]
+ANCHOR (False,False) v11/v11 105/200=52.5%   52.5% ± 14.6   [20,55,60,45,65,55,45,55,50,75]
+delta                        -1.5%           Welch t=-0.26 df=17  -> NOT significant
+```
+Anchor clean this time: 52.5% vs 50% (t=+0.54). So the effect went **+13.1% (proxy budget) → -1.5%
+(ship budget)** — it collapsed to a wash, if not slightly negative. Predicted in the #65 caveats
+(#64's flat returns curve) and confirmed. v13 also costs 41% more clock (3.1 vs 2.2 s/move; timing
+worst 394.9 s of the 600 s bank) for nothing measurable. **v11 remains champion; do not ship v13.**
+
+**Mechanism (why the lever was a proxy-budget artifact).** The +13% was an *interaction with shallow
+search*: at `ROUTINE_S=0.4`, aiming the clock at Powerful-Hand-critical turns buys real depth where it
+decides games. At `ROUTINE_S=1.5` the baseline already searches those turns deeply enough that extra
+critical budget adds nothing. **The lever only exists in a regime we don't ship.**
+
+**Standing lesson (adds to #64/#54).** Gate at ship budget, not a scaled proxy — a proxy can invent a
+lever that vanishes at the real operating point. Direction+mechanism at a proxy budget ≠ ship magnitude.
+
+**This closes the last pilot-side lever.** Search budget (#64) and critical-turn allocation (#65) are
+both exhausted at v11's point. The binding constraint is now **the net's leaf value**, not the search
+machinery. Next real push = net quality (flywheel gen #2 / retrain), not more clock or more triggers.
