@@ -8,8 +8,11 @@ counting prizes on held-out data (AUC 0.66 vs 0.71) and is dead weight in the mi
 value is `_prize_value`, a prize-difference heuristic. The policy prior is the component #72 found is
 actually carrying the agent.
 
-Clock: routine turns run a HARD 64-sim cap with ROUTINE_S=0.1s (#70: 32–563 sims indistinguishable; #66:
-top agents use ~0.5–3.3% of the clock while v6 used 33–66%). Critical turns keep v6's governor escalation.
+Clock: routine turns run at v6's original budget — ROUTINE_S=0.4s, hard 563-sim cap. #74 showed search
+amplifies its leaf (prize-diff), so more routine sims win (+26pp @563 vs 64); the earlier 0.1s/64 was dropped
+because its only support (#64/#70) used the broken net value leaf. Held at v6's ladder-validated 563 (not
+deeper: v11's 0.4→1.5 won offline yet lost ladder). Critical turns keep v6's governor escalation (5s/K=8).
+Net effect: a clean one-variable change vs v6 — the leaf evaluator only.
 
 **Graceful degradation** (unchanged): if onnxruntime / ptcgnet.onnx is missing, `_GUIDE` stays None and
 search falls back to plain heuristic MCTS-H — a missing runtime never becomes a loss. All wrapped so any
@@ -40,8 +43,11 @@ _GUIDE = None
 _GUIDE_TRIED = False
 _MODEL_DIR = None
 MAX_SIMS = 200_000   # cap; the governor deadline is the real limit (kept for critical turns)
-ROUTINE_SIMS = 64    # #70: routine turns run a HARD 64-sim cap (32-563 sims are indistinguishable)
-governor.ROUTINE_S = 0.1   # #66: top ladder agents spend ~0.5-3.3% of the clock; slash routine budget
+ROUTINE_SIMS = 563   # #74: search AMPLIFIES the (prize-diff) leaf -> more routine sims win (+26pp @563 vs 64).
+                     # 0.1s/64 dropped: its only support was #64/#70, offline gates run with the BROKEN net
+                     # value leaf that #74 refuted. Held at v6's ladder-validated ~563; NOT deeper (v11's
+                     # 0.4->1.5 won +19.6pp offline @z=4.33 yet lost 84.6 ladder — offline over-shoots anti-predict).
+governor.ROUTINE_S = 0.4   # v6's original routine budget -> one-variable change vs v6 (leaf evaluator only)
 
 
 def _model_dir():
@@ -178,7 +184,7 @@ def choose(obs_dict, time_left=None):
         else:
             prior_fn = mcts.uniform_prior
             value_fn = None
-        sims = ROUTINE_SIMS if budget.k == 1 else MAX_SIMS   # routine: hard 64-sim cap
+        sims = ROUTINE_SIMS if budget.k == 1 else MAX_SIMS   # routine: hard 563-sim cap (#74)
         pick, _stats = mcts.search(obs, worlds, _CI, _AI, sims=sims, deadline=deadline,
                                    prior_fn=prior_fn, value_fn=value_fn)
         return pick if pick is not None else _legal_random(sel)

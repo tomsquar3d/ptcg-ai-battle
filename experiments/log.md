@@ -2736,3 +2736,50 @@ existing buffer. The ship is **policy_only** (v6 policy prior + prize-diff leaf;
 routine 0.1s/64 sims). Scripts: `/tmp/train73.py` (TD-λ sweep), `/tmp/gen_heldout73.py` (held-out); data
 `/tmp/heldout73.npz`. (Cosmetic: the sweep printout's "held-out=alakazam_sp" is a stale label — data is the
 #72-matched npz, confirmed by prize AUC 0.662.)
+
+---
+
+## #74 — Sim-cap sweep with a PRIZE-DIFF leaf: search DOES help — #64/#70 were an artifact of the broken value head
+
+**Date:** 2026-08-08 (v9-dev). #64 and #70 both concluded "search doesn't help" (flat WR vs routine sims) —
+but both used the **net value head** at the leaves, the head #72 measured at held-out AUC 0.660 (vs prize-diff
+0.706) and which scored **23.4% as a standalone evaluator vs MCTS-H's 42.2%** (#72 ablation). Search amplifies
+its evaluator, so a flat sim-count response is the EXPECTED result with a broken one. Premise changed → sweep
+redone with the one change: **leaf evaluator = prize-difference** (not the net value head). Everything else
+identical to #70 (arms 563/300/150/64/32, 4-deck field, 8 reps/arm, hard sim cap + non-binding deadline,
+achieved sims measured). 320/320 decided; achieved sims == cap exactly for every arm.
+
+| routine sims | WR (n=64) | Wilson 95% | rep-mean 95% | Welch t vs 563 |
+|---|---|---|---|---|
+| 563 | **70.3%** | [58.2, 80.1] | [60.7, 79.9] | base |
+| 300 | 64.1% | [51.8, 74.7] | [55.3, 72.8] | −1.14 (df 13.9) |
+| 150 | 53.1% | [41.1, 64.8] | [37.6, 68.7] | −2.23 (df 11.6) |
+| 64  | 45.3% | [33.7, 57.4] | [30.6, 60.0] | −3.37 (df 12.0) |
+| 32  | 43.8% | [32.3, 55.9] | [27.9, 59.6] | −3.40 (df 11.5) |
+
+**Result: the curve RISES monotonically and significantly with sims** — 43.8 → 45.3 → 53.1 → 64.1 → 70.3;
+**32→563 = +26.5pp, Welch t=3.40 (p≈0.005)**, and still climbing at 563 (optimum ≥563). Contrast #70 (same
+harness, net value leaf): flat 42–55%, no significant trend. **The ONLY difference is the leaf, so this
+isolates the mechanism: search amplifies its evaluator.** #64/#70's "search doesn't help" was an artifact of a
+broken leaf, not a property of search — **this inverts the clock thesis for a policy_only agent.**
+
+**Consequence — the ship's routine budget is WRONG.** The `ship-candidate-policyonly` bundle uses routine
+0.1s / 64 sims (chosen on the now-refuted #64/#70 premise); #74 shows that costs ~25pp offline vs 563 sims.
+The policy_only *leaf change* stands; the *clock-starving* does not. **Action: raise the routine budget** — at
+least to v6's original ~0.4s / ~563 sims (top of tested range, strongly best here, and the incumbent's
+ladder-proven budget), possibly higher (curve still rising). **Caveat (per #67):** this is an offline gate vs
+a heuristic field — it does NOT prove more search helps *ladder rating* (top ladder agents use ~0.5–3.3% of
+clock, #66). What #74 proves is narrower and solid: the premise that justified 0.1s/64 is false. Don't ship at
+that floor. Data: `/tmp/gate74_rows.csv`, `/tmp/gate74_decisions.csv`; script `/tmp/gate74.py`.
+
+**DECISION (ship): routine → ROUTINE_S=0.4 / 563 sims** (criticals unchanged 5s/K=8, leaf stays prize-diff).
+`ship-candidate-policyonly` re-tagged at this budget. Rationale:
+- **0.1s/64 is dropped** — its ONLY support was #64/#70, offline gates run with the broken net value leaf,
+  which #74 refuted. It cannot survive its own basis.
+- **We do NOT take the deeper option**, even though #74 shows the curve still rising past 563. Going deeper is
+  effectively **v11** (v6 + ROUTINE_S 0.4→1.5), which won **+19.6pp offline at z=4.33 and then LOST 84.6 ladder
+  rating** (#62 → #66). Under #67 the *largest* offline wins have anti-predicted the ladder, so #74's +25pp
+  magnitude does not license going past the last **ladder-validated** clock setting (v6's 0.4s).
+- **0.4s/563 makes this a clean one-variable change vs v6** (leaf evaluator only: net value → prize-diff;
+  the #69 merged graph + #71 MAX_OPTIONS=56 are parity-verified no-ops). So the ladder read will be
+  *interpretable* — any Δ vs v6 is attributable to the leaf, not confounded by a clock change.
