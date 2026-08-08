@@ -4,6 +4,10 @@ Running journal of agent versions and experiments. Each entry: hypothesis, chang
 setup, result. This is the spine of the Strategy writeup (Model Score = 70%), so
 record numbers as they happen — see `docs/ptcg_agent_strategy.md` §7.
 
+> **[2026-08-07] v9-dev opened.** New development line `v9-dev` branched off `main` HEAD
+> (`58b8094`). Shipped **v6** tagged `fallback-v6` (commit `20783e4`, the tree byte-identical to
+> the shipped bundle) and archived to `artifacts/fallback_v6.tar.gz`. **Next experiment number is #67.**
+
 ---
 
 ## #1 — v0 baseline: legal-random agent + self-play harness
@@ -2417,3 +2421,318 @@ STRONGER AGENTS SPEND ON IT. That measurement cost zero games and was available 
 
 Tools: `scripts/probe_sims.py` (achieved sims/move by budget class; local solo = 521 sims routine @0.4 s,
 5311 critical @5 s, ~1.0-1.3k sims/s single-core).
+
+---
+
+## #67 — Does the local proxy/gate predict the ladder? META-ANALYSIS across every shipped pair
+
+**Date:** 2026-08-07 (v9-dev) · **Read-only; no agent code changed.** Question: for every version that
+had BOTH a pre-ship proxy/gate win-rate delta AND a subsequent live ladder rating, does the proxy delta
+predict the ladder delta? Numbers extracted and verified against the entries cited below.
+
+**The pairs (n=7).** Proxy Δ is the reported percentage-point advantage over the gate baseline; "LB before"
+is the ladder rating of the baseline the proxy was measured against (v6=683.7 is the incumbent for the
+challenger gates), "LB after" is that version's own live rating.
+
+| Ver | Proxy exp | Intervention | Proxy Δ (N, stat, vs baseline) | LB before | LB after | LB Δ |
+|-----|-----------|--------------|--------------------------------|-----------|----------|------|
+| v5  | #30 | net-guided MCTS replaces heuristic leaf | +8.5pp (58.5% h2h, N=200, z=+2.40, vs v4-heuristic) | 509.0 (v1) | 560.9 | **+51.9** |
+| v6  | #42 | deck-conditioned `net_ladder2` + Alakazam deck | +22.9pp (72.9% h2h, N=96, z=+5.05, vs sample+v5) | 560.9 (v5) | 683.7 | **+122.8** |
+| v7  | #44 | flywheel net `net_ladder3` | +22.9pp (72.9% h2h, N=96, z=+5.05, vs net_ladder2) | 683.7 (v6) | 635.7 | **−48.0** |
+| v8  | #47 | new archetype templates | +6.3pp (field-diff pooled, N=300v300, z=+1.57, vs v7) | 635.7 (v7) | 631.7 | **−4.0** |
+| v9  | #49 | posterior sampling vs MAP | +5.8pp (field-diff pooled, N=480v480, z=+1.81, vs v8) | 631.7 (v8) | 642.0 | **+10.3** |
+| v10 | #52 | determinizer change | +5.0pp (field-diff pooled, N=240v240, z=+1.10 ns, vs v6) | 683.7 (v6) | 614.8 | **−68.9** |
+| v11 | #62 | raise search budget 0.4→1.5 s (384 vs 96 sims) | +19.6pp (field-diff pooled, N=240, z=+4.33, vs v6) | 683.7 (v6) | 599.1 (217g) | **−84.6** |
+
+Ladder ratings for v6–v10 are the internally-consistent #54 snapshot (2026-07-12, lines 1891); v5=560.9
+(#44), v11=599.1 over 217 games (#66, line 2401). Sources verified: #30 line 1167, #34 line 1284, #42 line
+1566, #44 lines 1607/1622, #47 line 1711, #49 line 1790, #52 line 1853, #54 line 1891, #62 line 2116, #66
+line 2401.
+
+### Answers
+
+**1. How many pairs?** **7** (v5, v6, v7, v8, v9, v10, v11). Excluded: v1 (LB 509.0 but no proxy-vs-baseline
+gate), v13 (proxy +13.1%/−1.5% but NO-SHIP → no ladder reading, #65), v14 (gate never run, never submitted, #66).
+
+**2. Correlation (proxy Δ vs LB Δ), n=7:** Pearson **r = +0.12** (t(5)=+0.28, p≈0.79); Spearman **ρ = +0.22**
+(t(5)=+0.50, p≈0.64). **Both are statistically indistinguishable from zero.** The tiny positive sign is carried
+entirely by one point (v6: +22.9pp → +122.8); drop v6 and it goes flat/negative.
+
+**3. Sign disagreements (proxy says better, ladder says worse): 4 of 7 — v7, v8, v10, v11.** Every one had a
+positive, mostly "significant" proxy and a negative ladder move. The two biggest proxies in the whole set
+(v7 and v11, +22.9 and +19.6) produced two of the worst ladder outcomes (−48.0, −84.6). Only v5, v6 (and v9,
+whose +10.3 is inside noise) agreed.
+
+**4. How big must a proxy be to believe it moves the ladder?** Two-part, and the honest answer is discouraging.
+(a) *Visibility floor:* ±40 rating ≈ ±12% WR at ~60 games (line 1905), so to be even detectable a proxy must
+imply **>~40 rating / >~12% WR**. (b) *But visibility ≠ predictiveness:* proxies of +19.6 and +22.9pp — far
+above that floor — pointed the WRONG way on the ladder. **From these 7 points we cannot name any proxy
+magnitude, up to +22.9pp, that reliably predicts even the SIGN of the ladder move.**
+
+### Verdict (blunt)
+
+**The proxy does not predict the ladder, and there are also too few pairs to prove otherwise — both are true.**
+r≈0, ρ≈0, and 4/7 sign flips including the largest effects. The single clean "proxy→ladder" win (v6) is
+confounded: it changed the deck (sample→Alakazam) AND the net (first deck-conditioned) at once, so it is not a
+validation of the *gate* so much as of that bundle. This corroborates #54 (v6's lead is sampling noise, not
+skill), #64 (search-budget bumps below the noise floor), and #66 (the clock/search lever is a compute artifact):
+**self-play A/B deltas, however significant, have no demonstrated predictive value for ladder rating.** Caveats
+that further weaken any positive read: the proxy x-axis is a heterogeneous instrument (v5/v6/v7 are head-to-head
+win%; v8–v11 are field-differentials — different scales); LB ratings are read at 44–67 games (v11 excepted) so
+several LB Δ (v8 −4.0, v9 +10.3) are themselves inside ±40 noise; and v5's proxy baseline (v4 heuristic) never
+laddered, so its LB-before uses the actual ladder predecessor v1. **Actionable stance for v9-dev: do not ship on
+a proxy delta alone — the only trustworthy signal is a live ladder read, and even that needs >~40 rating / 100+
+games to clear noise.**
+
+---
+
+## #70 — Routine-sim-cap sweep: where does the agent BREAK as search is starved? (not "which is best")
+
+**Date:** 2026-08-07 (v9-dev). Per #67 this gate cannot establish *which* sim count is best (offline
+field WR doesn't predict the ladder). The question here is narrower and answerable: **does play visibly
+break as routine search depth is starved, and where does the evidence run out?**
+
+**Design (single variable).** Our pilot = the #69 merged graph on the shipped v6 weights (`net_ladder2`),
+piloting Alakazam, with a **HARD routine sim cap** ∈ {563 (≈current), 300, 150, 64, 32}, `k=1`, no critical
+escalation — so the arms differ *only* in search depth. A large non-binding safety deadline (`MOVE_CAP=20s`)
+means depth is hardware/load-independent (sim-controlled, not wall-clock). Opponent = **fixed heuristic
+MCTS-H @ 300 sims, `k=1`**, identical across all arms. Field pool: Alakazam mirror + mega-kangaskhan-ex +
+cynthia-s-garchomp-ex + marnie-s-grimmsnarl-ex, both seats. **8 replicates/arm × 2 games × 4 opp = 64
+games/arm, 320 total.** `n=64` gives a per-arm Wilson 95% CI of ≈±12pp — deliberately matched to the ladder
+noise floor.
+
+**Process note (why this is the trustworthy run).** The first attempt was killed: it was under-instrumented
+(never logged achieved sims — separation could only be *asserted* from code) and ran contended with the
+#69/#71 export/microbench jobs. Re-run **uncontended and instrumented** (per-decision CSV: `sims_achieved,
+n_options, decision_index, wall_ms, ts`). The instrumentation immediately earned its keep: it caught a
+would-be-**silent** bug — after #71 set `MAX_OPTIONS=56`, the gate still loaded the 64-wide graph → option-
+tensor shape mismatch → exception in the net path → silent **random-move fallback on our side** (opponent,
+being heuristic, was unaffected, so it would have looked like a real — but garbage — result). Fixed to the
+56-wide graph + a `featurizer-width == graph-width` assertion. **Lesson: measure separation, don't assert it.**
+
+**Integrity:** 320/320 games decided (0 undecided); 40,988 decisions logged; achieved sims == cap **exactly**
+for every arm (independent recompute: med[p25,p75] = cap[cap,cap]). Arms are measured-separated, no collapse.
+
+| routine sims | WR (n=64) | Wilson 95% | rep-mean 95% | Welch t vs 563 | achieved sims med[p25,p75] |
+|---|---|---|---|---|---|
+| **563 (baseline)** | 48.4% | [36.6, 60.4] | [33.2, 63.7] | — | 563[563,563] |
+| 300 | 53.1% | [41.1, 64.8] | [39.7, 66.5] | +0.55 (df 13.8) | 300[300,300] |
+| 150 | 54.7% | [42.6, 66.3] | [38.9, 70.4] | +0.67 (df 14.0) | 150[150,150] |
+| 64 | 50.0% | [38.1, 61.9] | [33.2, 66.8] | +0.16 (df 13.9) | 64[64,64] |
+| 32 | 50.0% | [38.1, 61.9] | [37.5, 62.5] | +0.19 (df 13.5) | 32[32,32] |
+
+**Findings.**
+- **No break anywhere in [32, 563].** All arms fall in a 48–55% band, every CI mutually overlapping, all Welch
+  t vs 563 tiny (|t| < 0.7) and *positive*. The baseline 563 is in fact the **lowest** (48.4%).
+- **Lowest sim count not clearly worse than 563 = 32** (the lowest tested): 50.0% vs 48.4%, t=+0.19, CIs fully
+  overlapping. Nothing is clearly worse than 563.
+- **Where the evidence runs out (explicit):** per-arm CI is ±~12pp; every pairwise arm gap is < ~6pp, i.e.
+  **inside the noise band**. This gate **cannot resolve** any difference between 32 and 563 routine sims. The
+  break point, if it exists, is **below 32 sims** — this sweep did not find it.
+
+**Read.** Consistent with #64/#66 (more routine search doesn't help): now we can add that **less routine search
+doesn't hurt either, down to 32 sims**, against this field. That points at the **value head / policy prior** as
+the binding constraint, not search depth — deeper routine search optimizes a leaf estimate that isn't the
+bottleneck. **Caveats:** heuristic-opponent gate at ±12pp resolution — says nothing about ladder rating (#67),
+and "not distinguishable" ≠ "equal." Data: `/tmp/gate70_rows.csv` (games), `/tmp/gate70_decisions.csv` (per
+decision). Code on `v9-dev`, uncommitted; the 56-wide merged artifacts live in /tmp (deployed ONNX untouched).
+
+**Per-opponent breakdown (WR%, n=16/cell, Wilson 95%).** Noise-dominated at ~±24pp per cell; included for
+completeness and the mirror analysis below.
+
+| sims | Alakazam (mirror) | mega-kangaskhan-ex | cynthia-garchomp-ex | marnie-grimmsnarl-ex |
+|---|---|---|---|---|
+| 563 | 38% [18,61] | 56% [33,77] | 69% [44,86] | 31% [14,56] |
+| 300 | 56% [33,77] | 69% [44,86] | 50% [28,72] | 38% [18,61] |
+| 150 | 62% [39,82] | 56% [33,77] | 44% [23,67] | 56% [33,77] |
+| 64  | 38% [18,61] | 75% [51,90] | 25% [10,49] | 62% [39,82] |
+| 32  | 50% [28,72] | 56% [33,77] | 44% [23,67] | 50% [28,72] |
+
+**Alakazam MIRROR — pilot quality, deck controlled (our net-MCTS @arm sims vs heuristic MCTS-H @300).** The one
+column where both sides pilot the same deck, so it isolates *pilot* (net-guided vs heuristic), not matchup.
+
+| sims | net-pilot WR | Wilson 95% | |
+|---|---|---|---|
+| 563 | 37.5% | [18.5, 61.4] | net has MORE sims than opp |
+| 300 | 56.2% | [33.2, 76.9] | equal sims — pure pilot test |
+| 150 | 62.5% | [38.6, 81.5] | net has fewer sims |
+| 64  | 37.5% | [18.5, 61.4] | net has fewer sims |
+| 32  | 50.0% | [28.0, 72.0] | net has fewer sims |
+| pooled (all arms) | 48.8% | [38.1, 59.5] | |
+
+**FLAG — the net pilot shows NO measurable edge over heuristic MCTS-H in the mirror.** Every mirror cell's CI
+includes 50%; the pooled mirror is **48.8% [38.1, 59.5] — at/below 50%** (arms 563 and 64 are outright below at
+37.5%). The cleanest comparison — equal sims, 300 vs 300 — is 56.2%, but CI [33.2, 76.9] straddles 50, so at
+n=16 it is not distinguishable from no edge; the point estimate is roughly consistent with the historical ~58%
+(#30, n=200) but this sample neither confirms nor refutes a ~5–8pp edge. Worth flagging because the v5→v6
+thesis assumes the *pilot* is the lever: #30 established net > heuristic at n=200, and #42's 77% was net_ladder2
+vs **v5** (another net, not heuristic) — neither is a mirror-vs-heuristic result at this scale. **Follow-up: a
+properly-powered net-vs-heuristic Alakazam-mirror gate (n≳200) to confirm the pilot edge still exists.**
+
+---
+
+## #71 — MAX_OPTIONS sizing: measure len(select.option) properly before shrinking 64→48
+
+**Date:** 2026-08-07 (v9-dev) · Context: the #69 fused graph runs `policy_scorer` over all MAX_OPTIONS
+padded slots on **every** node (leaf-only nodes too now), a cost that grows with `d_model` when the trunk
+scales — so the padded width is worth trimming *before* training the large preset (it changes the net's
+input shape, so it cannot land after). **Step 1 only: measure. No code changed yet.**
+
+**The #67-era number was undersampled.** That probe saw max option count 44 / 0 of 694 decisions >64 — but
+694 decisions is far too few for a tail question. Re-measured over **93,056 decisions** (520 games, all four
+field matchups Alakazam-vs-{alakazam mirror, mega-kangaskhan-ex, cynthia-s-garchomp-ex, marnie-s-grimmsnarl-ex},
+both seats). Option count is the engine's legal-move-set size (policy-independent), so fast random legal play
+is a valid — if anything wider — sampler; the harness records every decision's `len(select.option)`.
+
+**Full distribution (`/tmp/optdist71.py`):**
+
+| population | N | max | p99 | p99.9 | p99.99 | >44 | >48 | >56 | >64 |
+|---|---|---|---|---|---|---|---|---|---|
+| ALL decisions | 93,056 | **51** | 24 | 34.0 | 45.7 | 11 (0.0118%) | 3 (0.0032%) | 0 | 0 |
+| single-select (net-scored) | 84,237 | **51** | 24 | 35.0 | 46.0 | 11 (0.0131%) | 3 (0.0036%) | 0 | 0 |
+
+Max by matchup: alakazam 46, mega-kangaskhan-ex 37, cynthia-s-garchomp-ex 51, marnie-s-grimmsnarl-ex 51.
+
+**Read.** p99.9 = 34–35 is **comfortably under 48**, so the stated gate to proceed with 64→48 is met. The
+caveat the thin #67 sample hid: the true **max is 51**, so **48 would truncate ~0.003% of decisions (3 in
+93k, ~1 per 31k)** — rare, and by design handled by the `_FLOOR_FRAC` fallback (options beyond MAX_OPTIONS get
+a uniform exploratory prior), which is exactly what step 3 must verify. By contrast the current **64 never
+truncates** (max 51 < 64). If a *truncation-free* trim is preferred, **56** also shrinks the padded width and
+had **0** exceedances in this sample (>56 = 0); **52** would clear the observed max with a small margin.
+
+**RESOLUTION (2026-08-07): MAX_OPTIONS 64 → 56** (not 48). 56 is truncation-free across all 93,056 sampled
+decisions (>56 = 0) while still trimming 8 slots off the option path. 48 would truncate ~0.003% of decisions,
+and those are structurally the *widest* boards — likely the highest-leverage turns — where the `_FLOOR_FRAC`
+fallback replaces real per-option scores with a flat prior; the ~1–2% throughput edge of 48 over 56 is not
+worth a silent failure mode we have no gate to detect.
+
+**Step 2 — change + re-export + microbench.** Changed `src/nn/features.py:118` to `MAX_OPTIONS = 56`. The
+training path follows it symbolically (`dataset.py`, `recorder.py:41-42` use `F.MAX_OPTIONS`), so future
+buffers/nets adopt 56 automatically — which is why this had to land BEFORE the large-preset training, not
+after. Re-exported the merged graph from the shipped v6 weights (`net_ladder2.pt`) at width 56: merged-vs-
+two-file parity **exact (value Δ 0.0, logit Δ 0.0)**, vs torch 6e-08/4e-07, padded-board finite. Microbench
+(both arms measured back-to-back under identical load, so the delta is apples-to-apples; absolute µs are
+inflated vs #69's unloaded numbers because the #70 sweep was running):
+
+| metric | 64 (baseline) | 56 | Δ |
+|---|---|---|---|
+| merged session run µs | 208.8 | 205.4 | −1.6% |
+| leaf-only node µs (value cold) | 282.7 | 282.8 | ≈0 |
+| expanded node µs (value+priors-hit) | 291.0 | 291.8 | ≈0 |
+| ms/sim (fixed sims=300) | 0.512 | 0.508 | −0.8% |
+
+**Read:** at the *current* small `d_model` the win is negligible (~1–2% on the raw option-path run, sub-1% on
+ms/sim) — because per-node cost is dominated by the shared trunk + featurization, not the option width. That is
+expected and is exactly why the change is banked now: the option path (`opt_in` + `policy_scorer` over the
+padded slots) scales with `d_model`, so the 12.5% slot reduction compounds when the trunk grows. This is a
+pre-scale hygiene change, not a throughput win today.
+
+**Step 3 — truncation fallback verified.** Synthetic single-select decision with **60 options (>56)**:
+`encode_actions` truncated to 56 encoded slots (mask all-true), and `guide.priors` returned a valid
+distribution over **all 60 actions** — 60 keys == 60 actions, all finite ≥0, **sum = 1.000000000**, and the 4
+truncated actions (indices 56–59) each received the equal positive `_FLOOR_FRAC` floor (0.00439) with **no
+exception**. Step 3 → PASS.
+
+**Methodology lesson.** The #67 probe's "max option count 44, 0% > 64" was **undersampled at 694 decisions**.
+The true max over 93,056 decisions is **51**, and the tail does cross 48 (3 decisions > 48). Tail statistics
+(max, p99.9, rare-event rates) from sub-1k samples are not reliable — size the sample to the rarity you're
+trying to bound before acting on a tail claim.
+
+**Status:** code changes (`src/nn/features.py` MAX_OPTIONS=56; plus #69's `onnx_guide.py`/`export_onnx.py`) are
+on `v9-dev`, **uncommitted**; the deployed/tracked ONNX were not touched (all 56-width artifacts live in /tmp).
+One stale doc comment noted (`dataset.py:10` still says "64-wide pointer head").
+
+---
+
+## #72 — Is the v6 value head informative? ABLATION: policy carries the pilot, value head is dead weight
+
+**Date:** 2026-08-07 (v9-dev). Motivated by #65/#66's claim that "the binding constraint is the net's leaf
+value." Measured directly on self-play positions with known outcomes (`z`), v6 weights (`net_ladder2`).
+
+**Part 1 — value calibration (replay buffer `sample_dc`, 16,741 positions; TRAIN-INCLUSIVE → optimistic).**
+Predicted-value deciles vs actual win rate are cleanly monotonic (0.059 → 0.149 → 0.310 → 0.421 → 0.575 →
+0.643 → 0.761 → 0.865 → 0.956 → 0.996). **Pearson +0.637, Spearman +0.554, AUC 0.871.** Looks great — but see
+the held-out check below; this number is inflated by training leakage.
+
+**Part 2 — prize-difference baseline (same positions, `globals[4]`).** Pearson +0.243, Spearman +0.255,
+**AUC 0.618** (prize-diff ≈ 0 for ~73% of positions, so it barely separates).
+
+**Part 3a — policy top-1 vs net-MCTS choice (buffer, n=16,741): 0.713** (random ~0.268, mean 6.2 options).
+The raw policy prior already picks the eventual MCTS move ~71% of the time.
+
+**Part 3b — top-1 agreement, live full-condition decisions (n=4,779):** policy vs net-MCTS **0.678**; policy
+vs MCTS-H **0.485**; net-MCTS vs MCTS-H **0.504**. The net (policy and post-search) diverges from the heuristic
+about half the time.
+
+**HELD-OUT calibration cross-check (4,835 live full-condition positions, played out to outcome):**
+**value-head AUC 0.660 vs prize-diff AUC 0.706.** On genuinely held-out positions the value head is **no better
+than counting prizes — slightly worse.** The buffer's 0.871 (Part 1) was train-leak; the true figure is ~0.66.
+
+**Part 4 — mirror ablation (Alakazam mirror vs FIXED heuristic MCTS-H @300, our sims=300, k=1, 64 games each).**
+
+| condition | WR | Wilson 95% |
+|---|---|---|
+| full (net policy + net value) | 56.2% | [44.1, 67.7] |
+| policy_only (net policy + prize-diff value) | 57.8% | [45.6, 69.1] |
+| value_only (uniform priors + net value) | **23.4%** | [14.7, 35.1] |
+| mcts_h (control) | 42.2% | [30.9, 54.4] |
+
+**Verdict (plain): the POLICY prior carries the agent; the value head is dead weight — arguably harmful.**
+- **Value ≈ counting prizes, and worse as a search leaf.** full ≈ policy_only (56.2 vs 57.8) → swapping net
+  value for a trivial prize-diff changes nothing. Held-out AUC 0.660 ≤ prize-diff 0.706. value_only (uniform
+  priors + net value) = **23.4%**, far below the same-priors heuristic-evaluator control (mcts_h 42.2%) — so as
+  a leaf the net value is *worse* than the existing heuristic. The rosy buffer calibration was overfitting.
+- **Policy is the engine.** It lifts the pilot from 42.2% (heuristic control) to ~57% (full/policy_only), search
+  mostly follows it (0.68), and it diverges from the heuristic's picks (~0.49 agreement) in ways that win — the
+  policy prior knows more than the heuristic. This is the component to preserve.
+
+**Reconciles the arc:** #70 (net ≈ heuristic in the mirror) — the modest edge is *all policy, zero value*; and
+#65/#66 (leaf value is the binding constraint) — **confirmed**: the value head is no better than prizes on
+held-out data. **Lever for v9-dev: retrain/improve the value head (currently ~prize-level); keep the policy.**
+**Methodology lesson:** never trust calibration on the training buffer — Part 1's 0.871 vs the held-out 0.660
+would have completely misled us. Caveats: n=64/arm (±~12pp), equal-sims 300 mirror, heuristic opponent — per
+#67 says nothing about ladder rating. Data: `/tmp/diag72_games.csv`, `/tmp/diag72_decisions.csv`; scripts
+`/tmp/diag72a.py` (buffer), `/tmp/diag72b.py` (ablation).
+
+---
+
+## #73 — Can the value head be salvaged? NO: TD(λ)+Huber+aux never beats prize-diff on held-out
+
+**Date:** 2026-08-07 (v9-dev). Follow-up to #72 (value head is prize-level, dead weight). Question: can a
+retrained value head — **without touching the policy** — beat prize-diff on held-out? Value-head-only changes:
+**TD(λ) bootstrapped value targets** (single-pass backward recursion `G[t]=(1-λ)V[t+1]+λG[t+1]`, γ=1,
+bootstrap V from net_ladder2; λ=1.0 reduces exactly to terminal-only z — asserted in code), **Huber** value
+loss (δ=1.0), **prize_head + tta_head** MSE wired in, **policy head architecture + CE loss UNCHANGED**
+(warm-start from net_ladder2, per-slot policy head; policy top-1 tracked as a guardrail).
+
+**Setup.** Train on `sample_dc` (net_ladder2's buffer, 700 shards / 13.6k train + 2.4k val positions).
+**Gate on a #72-matched held-out set** — the exact 4,835 #72 positions lacked stored features, and
+`alakazam_sp` proved an easier distribution (prize AUC 0.81), so regenerated 3,500 positions from the
+full-net pilot (Alakazam mirror vs heuristic, flat 300 sims, features saved). **prize-diff AUC on this set =
+0.662** (near #72's 0.706; the target). Report train AUC and held-out AUC SEPARATELY (per #72, train-inclusive
+would mislead). 6 epochs/λ, warm-started, best-by-held-out-AUC.
+
+| config | train AUC | held-out AUC | policy top1 | beats prize (0.662)? |
+|---|---|---|---|---|
+| net_ladder2 (baseline) | 0.853 | **0.587** | 0.720 | NO |
+| λ=1.0 (terminal-only control) | 0.828 | **0.587** | 0.677 | NO |
+| λ=0.9 | 0.842 | **0.588** | 0.660 | NO |
+| λ=0.7 | 0.848 | **0.593** | 0.690 | NO |
+| λ=0.5 | 0.848 | **0.598** | 0.717 | NO |
+
+**Verdict: nothing beats prize-diff.** Best held-out AUC = 0.598 (λ=0.5), **0.064 below prize-diff's 0.662
+(~5 SE — robust).** TD(λ)+Huber+aux moved held-out AUC almost nothing (0.587→0.598); lower λ helped
+monotonically but trivially. **Per the pre-committed rule: prize-diff STAYS as the evaluator, and we ship
+policy_only.**
+
+**Why (the real diagnosis): it's the training DISTRIBUTION, not the loss.** Every config shows a ~0.25
+train→held-out AUC collapse (0.85 → 0.59) — the value head fits `sample_dc` but does not transfer to Alakazam
+positions. Re-confirms #72: the train-inclusive number (0.85) would have completely misled us; held-out truth
+~0.59. A better value head would need Alakazam value data, which is out of scope for "value-head-only from the
+existing buffer." **Policy guardrail held** (top-1 ~0.66–0.72 vs 0.72 baseline) — the policy wasn't degraded.
+
+**Consequence:** #72 + #73 together close the value-head arc — it is prize-level and not salvageable from the
+existing buffer. The ship is **policy_only** (v6 policy prior + prize-diff leaf; #69/#71 merged 56-wide graph;
+routine 0.1s/64 sims). Scripts: `/tmp/train73.py` (TD-λ sweep), `/tmp/gen_heldout73.py` (held-out); data
+`/tmp/heldout73.npz`. (Cosmetic: the sweep printout's "held-out=alakazam_sp" is a stale label — data is the
+#72-matched npz, confirmed by prize AUC 0.662.)

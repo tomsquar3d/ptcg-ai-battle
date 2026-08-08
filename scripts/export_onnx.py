@@ -5,10 +5,15 @@ Two graphs from the same weights, mirroring how the agent calls the net inside M
   value.onnx  : state tensors            -> value  [B]        (the hot path — every leaf)
   policy.onnx : state + option tensors   -> raw logits [B,64] (unmasked; the guide masks in numpy)
 
-Only the batch dim is dynamic; the option dim is fixed at MAX_OPTIONS. Validates that ONNX outputs
-match torch within 1e-4 on real decision states (including a fully-padded board — the NaN-guard path).
+With `--merged` it ALSO emits a single fused graph (the two-file path stays intact):
+  ptcgnet.onnx: state + option tensors   -> (value [B], raw logits [B,64]) from ONE encode_state pass,
+                so the guide runs the shared trunk once per node instead of twice (value + policy).
 
-Run:  .venv/bin/python scripts/export_onnx.py [checkpoint.pt] [out_dir]
+Only the batch dim is dynamic; the option dim is fixed at MAX_OPTIONS. Validates that ONNX outputs
+match torch within 1e-4 on real decision states (including a fully-padded board — the NaN-guard path);
+with `--merged`, also validates the fused graph matches the two-file graphs within 1e-4.
+
+Run:  .venv/bin/python scripts/export_onnx.py [checkpoint.pt] [out_dir] [--merged]
 """
 import os
 import sys
@@ -88,6 +93,44 @@ class _PolicyWrapperDC(nn.Module):
         return self.net.policy_scorer(torch.cat([opt, st], -1)).squeeze(-1)
 
 
+class _MergedWrapper(nn.Module):
+    """Fused graph: one encode_state pass -> (value, raw unmasked logits). Same weights, same math as
+    _ValueWrapper + _PolicyWrapper, but the shared trunk runs once."""
+    def __init__(self, net):
+        super().__init__()
+        self.net = net
+
+    def forward(self, pokemon_ids, pokemon_scalars, pokemon_mask, hand_ids, hand_mask, stadium_id,
+                globals, option_card_ids, option_scalars):
+        b = dict(pokemon_ids=pokemon_ids, pokemon_scalars=pokemon_scalars, pokemon_mask=pokemon_mask,
+                 hand_ids=hand_ids, hand_mask=hand_mask, stadium_id=stadium_id, globals=globals)
+        state = self.net.encode_state(b)
+        value = torch.tanh(self.net.value_head(state)).squeeze(-1)
+        opt = self.net.opt_in(torch.cat([self.net.card_embed(option_card_ids), option_scalars], -1))
+        st = state.unsqueeze(1).expand(-1, opt.shape[1], -1)
+        logits = self.net.policy_scorer(torch.cat([opt, st], -1)).squeeze(-1)   # raw, unmasked
+        return value, logits
+
+
+class _MergedWrapperDC(nn.Module):
+    """Deck-conditioned (schema-v2) fused graph: adds deck_summary + archetype_id state inputs."""
+    def __init__(self, net):
+        super().__init__()
+        self.net = net
+
+    def forward(self, pokemon_ids, pokemon_scalars, pokemon_mask, hand_ids, hand_mask, stadium_id,
+                globals, deck_summary, archetype_id, option_card_ids, option_scalars):
+        b = dict(pokemon_ids=pokemon_ids, pokemon_scalars=pokemon_scalars, pokemon_mask=pokemon_mask,
+                 hand_ids=hand_ids, hand_mask=hand_mask, stadium_id=stadium_id, globals=globals,
+                 deck_summary=deck_summary, archetype_id=archetype_id)
+        state = self.net.encode_state(b)
+        value = torch.tanh(self.net.value_head(state)).squeeze(-1)
+        opt = self.net.opt_in(torch.cat([self.net.card_embed(option_card_ids), option_scalars], -1))
+        st = state.unsqueeze(1).expand(-1, opt.shape[1], -1)
+        logits = self.net.policy_scorer(torch.cat([opt, st], -1)).squeeze(-1)   # raw, unmasked
+        return value, logits
+
+
 def _collect_states(n_want, ci, ai):
     """Grab a few real (state, action) featurizations to trace/validate with."""
     deck = [int(x) for x in open(os.path.join(REPO, "submissions", "v4", "deck.csv")).read().split() if x.strip()]
@@ -115,8 +158,10 @@ def _collect_states(n_want, ci, ai):
 
 
 def main() -> int:
-    ckpt = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO, "experiments", "checkpoints", "net.pt")
-    out_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(REPO, "experiments", "checkpoints")
+    merged = "--merged" in sys.argv
+    pos = [a for a in sys.argv[1:] if not a.startswith("--")]
+    ckpt = pos[0] if len(pos) > 0 else os.path.join(REPO, "experiments", "checkpoints", "net.pt")
+    out_dir = pos[1] if len(pos) > 1 else os.path.join(REPO, "experiments", "checkpoints")
     os.makedirs(out_dir, exist_ok=True)
     torch.manual_seed(0)
 
@@ -199,6 +244,44 @@ def main() -> int:
     print(f"  {os.path.relpath(p_path, REPO)}  ({os.path.getsize(p_path)/1e6:.2f} MB)")
     print(f"validate (vs torch, {len(states)} real states): "
           f"value maxΔ {v_diff:.2e}, logit maxΔ {l_diff:.2e}; padded-board finite ✓")
+
+    if merged:
+        # --- fused single-trunk graph (the two files above are left intact) ------------------
+        MergedW = _MergedWrapperDC if deck_cond else _MergedWrapper
+        m_path = os.path.join(out_dir, "ptcgnet.onnx")
+        torch.onnx.export(
+            MergedW(net), policy_inputs, m_path,
+            input_names=state_args + ["option_card_ids", "option_scalars"],
+            output_names=["value", "logits"], opset_version=18,
+            dynamic_axes={k: {0: "batch"} for k in state_args +
+                          ["option_card_ids", "option_scalars", "value", "logits"]})
+        onnx.save_model(onnx.load(m_path), m_path, save_as_external_data=False)
+        if os.path.exists(m_path + ".data"):
+            os.remove(m_path + ".data")
+
+        ms = ort.InferenceSession(m_path, so, providers=["CPUExecutionProvider"])
+        mv, ml = ms.run(["value", "logits"], p_in)          # same inputs as the policy graph
+        # fused vs the two-file graphs (the parity that matters for a behaviour-identical swap)
+        mv_vs_v = float(np.abs(mv - v_out).max())
+        ml_vs_p = float(np.abs(ml[om] - p_out[om]).max())
+        # and fused vs torch
+        mv_vs_t = float(np.abs(mv - t_value.numpy()).max())
+        ml_vs_t = float(np.abs(ml[om] - t_logits.numpy()[om]).max())
+        m_zpad = dict(zpad)
+        m_zpad["option_card_ids"] = batch["option_card_ids"].numpy()
+        m_zpad["option_scalars"] = batch["option_scalars"].numpy()
+        mv_pad, ml_pad = ms.run(["value", "logits"], m_zpad)
+
+        assert mv_vs_v < 1e-4, f"merged value vs value.onnx mismatch {mv_vs_v}"
+        assert ml_vs_p < 1e-4, f"merged logits vs policy.onnx mismatch {ml_vs_p}"
+        assert mv_vs_t < 1e-4 and ml_vs_t < 1e-4, f"merged vs torch mismatch {mv_vs_t}/{ml_vs_t}"
+        assert np.isfinite(mv_pad).all() and np.isfinite(ml_pad).all(), \
+            "fully-padded board -> non-finite in merged ONNX"
+        print(f"  {os.path.relpath(m_path, REPO)}  ({os.path.getsize(m_path)/1e6:.2f} MB)")
+        print(f"validate merged (vs two-file, {len(states)} real states): "
+              f"value maxΔ {mv_vs_v:.2e}, logit maxΔ {ml_vs_p:.2e}; vs torch "
+              f"{mv_vs_t:.2e}/{ml_vs_t:.2e}; padded-board finite ✓")
+
     print("\nOK: PTCGNet exported to ONNX and numerically matches torch.")
     return 0
 

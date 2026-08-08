@@ -115,7 +115,8 @@ def summarize_deck(decklist: Optional[Sequence[int]], card_index: Mapping[int, A
     v[_N_CARD_TYPES + _N_ENERGY_TYPES:] = np.asarray(agg, dtype=np.float32)
     return v
 
-MAX_OPTIONS = 64          # legal options per decision (padded/truncated for the policy head)
+MAX_OPTIONS = 56          # legal options per decision (padded/truncated for the policy head; #71:
+                          # trimmed 64->56 — truncation-free over 93k sampled decisions (max 51))
 N_OPTION_TYPES = 17       # cg.api.OptionType values 0..16
 OPTION_SCALAR_DIM = N_OPTION_TYPES + 10   # type one-hot + 10 scalar features
 

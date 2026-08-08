@@ -11,8 +11,9 @@ plays the Pokémon Trading Card Game inside the organizers' C++ battle engine (t
 (entries #1–#32). **Read both if you need history** — they are the source of truth for
 architecture, decisions, and what has and hasn't worked.
 
-The repo is well past scaffolding: a full agent stack exists and **v5 (a trained,
-net-guided MCTS agent) is the current ship, submitted to Kaggle.** See "Where we are now" below.
+The repo is well past scaffolding: a full agent stack exists and **v6 (a deck-conditioned,
+net-guided MCTS agent) is the current ship, submitted to Kaggle** (best submission, ~683.7 on
+the ladder; v5 is the previous sample-deck ship). See "Where we are now" below.
 
 Key dates: simulation entry closes **Aug 9 2026**, agent submission **Aug 16 2026**, strategy
 writeup **Sep 13 2026**.
@@ -27,9 +28,13 @@ The agent arc, in submission order (`submissions/vN/`, each a self-contained bun
 - **v3** — beam/best-first turn search. Strict pilot upgrade but ~no gain on the simple deck we
   ship, so not submitted.
 - **v4** — determinized PUCT **MCTS with a heuristic leaf** (no networks). Strongest *heuristic* pilot.
-- **v5** — **CURRENT SHIP.** v4's MCTS but priors + leaf value come from a trained net served via
-  **ONNX-CPU** (`OnnxGuide`, onnxruntime, single-threaded, torch-free). Gracefully degrades to
-  heuristic MCTS if the net/onnxruntime is missing (net can never cause a crash/timeout loss).
+- **v5** — **previous ship (superseded by v6).** v4's MCTS but priors + leaf value come from a
+  trained net served via **ONNX-CPU** (`OnnxGuide`, onnxruntime, single-threaded, torch-free).
+  Gracefully degrades to heuristic MCTS if the net/onnxruntime is missing (net can never cause a
+  crash/timeout loss).
+- **v6** — **CURRENT SHIP.** Same pipeline as v5 but the shipped net is the deck-conditioned
+  `net_ladder2`, piloting the ladder Alakazam deck (#43). Best submission to date (~683.7 on the
+  ladder). Same graceful degradation to heuristic MCTS as v5.
 
 **The ML pipeline is built and validated end-to-end** (AlphaZero-style): self-play recorder
 (`src/selfplay/`) → buffer → trainer (`scripts/train_net.py`) → `PTCGNet` (`src/nn/encoder.py`,
