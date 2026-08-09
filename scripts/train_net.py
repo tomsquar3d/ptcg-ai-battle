@@ -28,7 +28,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "submissions", "v1"))   # cg/ (unused here but keeps paths uniform)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from nn.encoder import PTCGNet, NetConfig                      # noqa: E402
+from nn.encoder import PTCGNet, NetConfig, v9_config           # noqa: E402
 from nn import dataset as D                                    # noqa: E402
 
 
@@ -116,6 +116,14 @@ def main() -> int:
                     help="train value ONLY on MCTS rows (BC rows have fake all-+1 z → poison the value head)")
     ap.add_argument("--select", choices=["policy", "value", "sum"], default="policy",
                     help="checkpoint criterion: policy=top1 (default), value=value_sign_acc, sum=top1+sign")
+    # v9: the sized-for-our-corpus preset + the Option C compositional card embedding
+    ap.add_argument("--preset", choices=["v6", "v9"], default="v6",
+                    help="v6 = the shipped arch (flags below apply); v9 = the sized preset (deck-cond + aux on)")
+    ap.add_argument("--card-features", default=os.path.join(REPO, "experiments", "checkpoints",
+                                                            "card_features.npz"),
+                    help="frozen card-attribute matrix from scripts/build_card_features.py (v9 preset)")
+    ap.add_argument("--residual-l2", type=float, default=1e-4,
+                    help="explicit L2 pull toward zero on the per-card residual table r_c")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -139,9 +147,23 @@ def main() -> int:
     if args.aux_heads and not D.has_aux(buf):
         print("  WARN: --aux-heads set but buffer has no aux targets (defaults to zeros)")
 
-    cfg = NetConfig(deck_cond=args.deck_cond, aux_heads=args.aux_heads)
+    if args.preset == "v9":
+        cfg = v9_config()
+        if args.card_features and os.path.exists(args.card_features):
+            n_res = int(np.load(args.card_features)["n_residual_cards"])
+            cfg = v9_config(n_residual_cards=n_res)     # size r_c from the corpus frequency curve
+    else:
+        cfg = NetConfig(deck_cond=args.deck_cond, aux_heads=args.aux_heads)
     net = PTCGNet(cfg).to(device)
-    print(f"net: {net.num_params():,} params | deck_cond={cfg.deck_cond} aux_heads={cfg.aux_heads}")
+    if cfg.compositional_embed:
+        if not os.path.exists(args.card_features):
+            raise SystemExit(f"--preset v9 needs the card-attribute matrix; run "
+                             f"scripts/build_card_features.py (missing: {args.card_features})")
+        info = net.load_card_features(args.card_features)
+        print(f"card features: attrs {info['attrs']}, residual rows {info['n_residual_cards']} "
+              f"(L2 {args.residual_l2:g})")
+    print(f"net: {net.num_params():,} params | preset={args.preset} deck_cond={cfg.deck_cond} "
+          f"aux_heads={cfg.aux_heads} compositional={cfg.compositional_embed}")
     opt = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     rng = np.random.default_rng(args.seed)
 
@@ -194,6 +216,8 @@ def main() -> int:
                 al = aux_loss(aux, D.aux_targets(buf, b, device))
                 loss = loss + args.aux_weight * al
                 run_aux += al.item() * len(b)
+            if cfg.compositional_embed and args.residual_l2 > 0:
+                loss = loss + args.residual_l2 * net.residual_l2()
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0)

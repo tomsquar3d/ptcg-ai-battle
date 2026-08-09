@@ -45,6 +45,9 @@ class NetConfig:
     n_attn_layers: int = 1       # depth of the board self-attention stack
     activation: str = "relu"     # "relu" (v5/v6) | "gelu" (v9) — used by every MLP and the attn FFN
     norm_first: bool = False     # pre-norm transformer blocks (+ a final LayerNorm on the stack)
+    compositional_embed: bool = False   # Option C card embedding: e_c = W @ attr(c) + r_c
+    card_attr_dim: int = 100     # width of the frozen attribute matrix (scripts/build_card_features.py)
+    n_residual_cards: int = 0    # residual-table rows incl. the frozen zero row; 0 = one row per card
 
 
 def v9_config(**overrides) -> NetConfig:
@@ -54,13 +57,77 @@ def v9_config(**overrides) -> NetConfig:
     GELU) with a wider state trunk (256→384). Deck conditioning + aux heads on.
     """
     cfg = dict(embed_dim=128, d_model=192, state_dim=384, n_heads=4, n_attn_layers=2,
-               activation="gelu", norm_first=True, deck_cond=True, aux_heads=True)
+               activation="gelu", norm_first=True, deck_cond=True, aux_heads=True,
+               compositional_embed=True, n_residual_cards=40)
     cfg.update(overrides)
     return NetConfig(**cfg)
 
 
 def _act(cfg: NetConfig) -> nn.Module:
     return nn.GELU() if cfg.activation == "gelu" else nn.ReLU()
+
+
+class _CompositionalCardEmbedding(nn.Module):
+    """Option C card embedding:  e_c = W @ attr(c) + r_c.
+
+    `attrs` is a frozen [VOCAB_SIZE, card_attr_dim] buffer of hand-built card attributes (built by
+    `scripts/build_card_features.py` from the card CSV). W (`proj`) is learned and shared by every
+    card, so the ~1,230 ids our self-play corpus never shows still get a meaningful vector out of
+    their attributes rather than the dead random row a plain `nn.Embedding` would give them.
+
+    `r_c` (`residual`) is the learned per-card correction: zero-init and L2-pulled toward zero
+    (`residual_l2`), so it only earns capacity where the data actually demands it. Row 0 is a frozen
+    zero row (padding_idx) shared by PAD and by every card outside `residual_index`, which is how
+    `cfg.n_residual_cards` stays small — it is sized from the corpus frequency curve, not the vocab.
+
+    PAD keeps e_PAD == 0 exactly (its attr row is zero and it maps to residual row 0), matching the
+    `padding_idx=0` behaviour of the embedding this replaces — the masked pools and the padded-board
+    NaN guard depend on it.
+    """
+
+    def __init__(self, vocab: int, embed_dim: int, attr_dim: int, n_residual: int):
+        super().__init__()
+        n_residual = vocab if n_residual <= 0 else min(n_residual, vocab)
+        self.register_buffer("attrs", torch.zeros(vocab, attr_dim))
+        # identity by default: every card its own row, so an unloaded net still trains sensibly
+        idx = torch.arange(vocab, dtype=torch.long) if n_residual >= vocab else torch.zeros(vocab, dtype=torch.long)
+        self.register_buffer("residual_index", idx)
+        self.proj = nn.Linear(attr_dim, embed_dim, bias=False)
+        self.residual = nn.Embedding(n_residual, embed_dim, padding_idx=0)
+        nn.init.zeros_(self.residual.weight)
+
+    def forward(self, ids: torch.Tensor) -> torch.Tensor:
+        return self.proj(self.attrs[ids]) + self.residual(self.residual_index[ids])
+
+    def residual_l2(self) -> torch.Tensor:
+        """Sum of squared residuals — the explicit 'pull r_c toward zero' term for the loss."""
+        return self.residual.weight.pow(2).sum()
+
+    @torch.no_grad()
+    def load_card_features(self, attrs: np.ndarray, residual_index: np.ndarray | None = None) -> None:
+        if attrs.shape != tuple(self.attrs.shape):
+            raise ValueError(f"attrs {attrs.shape} != expected {tuple(self.attrs.shape)}")
+        self.attrs.copy_(torch.as_tensor(attrs, dtype=self.attrs.dtype))
+        if residual_index is not None:
+            ri = torch.as_tensor(residual_index, dtype=torch.long)
+            if ri.shape != tuple(self.residual_index.shape):
+                raise ValueError(f"residual_index {tuple(ri.shape)} != {tuple(self.residual_index.shape)}")
+            n = self.residual.num_embeddings
+            if int(ri.max()) >= n:
+                raise ValueError(f"residual_index max {int(ri.max())} >= n_residual_cards {n}")
+            self.residual_index.copy_(ri)
+
+    @torch.no_grad()
+    def materialize(self) -> nn.Embedding:
+        """Bake W @ attr + r into a plain [VOCAB, embed] table.
+
+        The composition is a training-time parameterization only — at export we collapse it so the
+        ONNX graph keeps the same single Gather it has today, and no card data ships in the bundle.
+        """
+        vocab, embed_dim = self.attrs.shape[0], self.proj.out_features
+        table = nn.Embedding(vocab, embed_dim, padding_idx=0)
+        table.weight.copy_(self.forward(torch.arange(vocab, dtype=torch.long)))
+        return table
 
 
 class _AttnPool(nn.Module):
@@ -80,7 +147,11 @@ class PTCGNet(nn.Module):
     def __init__(self, cfg: NetConfig = NetConfig()):
         super().__init__()
         self.cfg = cfg
-        self.card_embed = nn.Embedding(F.VOCAB_SIZE, cfg.embed_dim, padding_idx=F.PAD_ID)
+        if cfg.compositional_embed:
+            self.card_embed = _CompositionalCardEmbedding(
+                F.VOCAB_SIZE, cfg.embed_dim, cfg.card_attr_dim, cfg.n_residual_cards)
+        else:
+            self.card_embed = nn.Embedding(F.VOCAB_SIZE, cfg.embed_dim, padding_idx=F.PAD_ID)
 
         self.pk_in = nn.Linear(cfg.embed_dim + F.POKEMON_SCALAR_DIM, cfg.d_model)
 
@@ -181,6 +252,29 @@ class PTCGNet(nn.Module):
             aux["prize_diff_t3"] = torch.tanh(self.prize_head(state)).squeeze(-1)      # [B] ∈ (-1,1)
             aux["turns_to_attack"] = torch.sigmoid(self.tta_head(state)).squeeze(-1)   # [B] ∈ (0,1)
         return logits, value, aux
+
+    def residual_l2(self) -> torch.Tensor:
+        """Card-residual L2 penalty (zero when the compositional embedding is off)."""
+        if isinstance(self.card_embed, _CompositionalCardEmbedding):
+            return self.card_embed.residual_l2()
+        return torch.zeros((), device=next(self.parameters()).device)
+
+    def load_card_features(self, path: str) -> dict:
+        """Load the frozen attribute matrix + residual index from `build_card_features.py` output."""
+        if not isinstance(self.card_embed, _CompositionalCardEmbedding):
+            raise RuntimeError("net was not built with cfg.compositional_embed")
+        z = np.load(path)
+        self.card_embed.load_card_features(z["attrs"], z.get("residual_index"))
+        return {"attrs": tuple(z["attrs"].shape), "n_residual_cards": int(z["n_residual_cards"])}
+
+    @torch.no_grad()
+    def materialize_card_embed(self) -> "PTCGNet":
+        """Collapse a compositional embedding into a plain table, in place. Call before ONNX export:
+        the exported graph then has the same single Gather as the v5/v6 graphs and carries no card
+        data. Mathematically identical, so torch/ONNX parity is unaffected."""
+        if isinstance(self.card_embed, _CompositionalCardEmbedding):
+            self.card_embed = self.card_embed.materialize()
+        return self
 
     def num_params(self) -> int:
         return sum(p.numel() for p in self.parameters())
