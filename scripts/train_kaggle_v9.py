@@ -147,9 +147,14 @@ def main() -> int:
         print("  WARN: buffer has no aux targets — aux heads will train on zeros")
 
     opt = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    start_ep, best, stale, stopped_early = 1, -1.0, 0, False
+    start_ep, best, best_auc, stale, stopped_early = 1, -1.0, -1.0, 0, False
     last_path = os.path.join(args.out_dir, "v9_last.pt")
     best_path = os.path.join(args.out_dir, "v9_best.pt")
+    # Second selection criterion, kept deliberately. The two peak at different epochs — the policy
+    # can keep improving long after the value head has started overfitting — and the AUC-best net is
+    # a distinct ship candidate (policy + net value) that #72's ablation would decide against
+    # policy_only + prize-diff. Selecting on top-1 alone would silently discard it.
+    best_auc_path = os.path.join(args.out_dir, "v9_best_auc.pt")
     hist_path = os.path.join(args.out_dir, "v9_history.json")
     history = []
     if args.resume and os.path.exists(last_path):
@@ -157,10 +162,11 @@ def main() -> int:
         net.load_state_dict(ck["model"])
         opt.load_state_dict(ck["optim"])
         start_ep, best = ck["epoch"] + 1, ck.get("best", -1.0)
+        best_auc = ck.get("best_auc", -1.0)
         stale = ck.get("stale", 0)          # patience must survive a killed session, not reset to 0
         history = ck.get("history", [])
         print(f"resumed from {last_path} at epoch {start_ep} (best held-out top1 {best:.4f}, "
-              f"{stale}/{args.patience} epochs stale)")
+              f"best held-out AUC {best_auc:.4f}, {stale}/{args.patience} epochs stale)")
 
     def batches(idx, shuffle, rng=None):
         order = idx.copy()
@@ -280,12 +286,20 @@ def main() -> int:
             stale = 0
         else:
             stale += 1
+        # NaN-safe: a buffer with no real-outcome rows gives AUC NaN, and NaN > x is False, so the
+        # AUC checkpoint simply never gets written rather than being poisoned by a NaN "best".
+        improved_auc = vm["value_auc"] > best_auc
+        if improved_auc:
+            best_auc = vm["value_auc"]
         state = {"model": net.state_dict(), "optim": opt.state_dict(), "config": vars(cfg),
-                 "epoch": ep, "best": best, "stale": stale, "history": history}
+                 "epoch": ep, "best": best, "best_auc": best_auc, "stale": stale, "history": history}
         torch.save(state, last_path)                 # EVERY epoch — a killed session resumes here
         if improved:
             torch.save(state, best_path)
             print(f"        * new best held-out top1 {best:.4f} -> {os.path.basename(best_path)}")
+        if improved_auc:
+            torch.save(state, best_auc_path)
+            print(f"        * new best held-out AUC  {best_auc:.4f} -> {os.path.basename(best_auc_path)}")
         with open(hist_path, "w") as fh:
             json.dump(history, fh, indent=2)
 
@@ -312,7 +326,27 @@ def main() -> int:
               f"-> {'PASS' if fin['value_auc'] > VALUE_GATE else 'FAIL'}")
         print(f"value AUC    {fin['value_auc']:.4f} vs {fin['prize_auc']:.4f} (prize-diff, same rows) "
               f"-> {'PASS' if fin['value_auc'] > fin['prize_auc'] else 'FAIL'}")
-        print(f"\ncheckpoints: {best_path} (best), {last_path} (resume), {hist_path}")
+
+        # the other candidate: policy + net value, which peaks at its own epoch
+        auc_rows = [r for r in history if r["held_out"]["value_auc"] == r["held_out"]["value_auc"]]
+        if auc_rows:
+            atop = max(auc_rows, key=lambda r: r["held_out"]["value_auc"])
+            a = atop["held_out"]
+            print(f"\n=== BEST-AUC CHECKPOINT (epoch {atop['epoch']}) — the policy+net-value candidate ===")
+            print(f"value AUC    {a['value_auc']:.4f} vs {VALUE_GATE:.3f} (#73 cross-run) "
+                  f"-> {'PASS' if a['value_auc'] > VALUE_GATE else 'FAIL'}")
+            print(f"value AUC    {a['value_auc']:.4f} vs {a['prize_auc']:.4f} (prize-diff, same rows) "
+                  f"-> {'PASS' if a['value_auc'] > a['prize_auc'] else 'FAIL'}")
+            print(f"policy top-1 {a['policy_top1']:.4f} (vs {fin['policy_top1']:.4f} at the top-1 epoch)")
+            print(f"GAP at that epoch: top-1 {atop['gap_policy_top1']:+.4f}, "
+                  f"AUC {atop['gap_value_auc']:+.4f}")
+            if atop["epoch"] != top["epoch"]:
+                print(f"NOTE: the two criteria peak at different epochs ({top['epoch']} vs "
+                      f"{atop['epoch']}) — decide between them with a #72-style ablation, not by "
+                      f"held-out numbers alone.")
+
+        print(f"\ncheckpoints: {best_path} (top-1), {best_auc_path} (AUC), "
+              f"{last_path} (resume), {hist_path}")
     return 0
 
 
