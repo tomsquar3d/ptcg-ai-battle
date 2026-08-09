@@ -41,6 +41,26 @@ class NetConfig:
     aux_heads: bool = False      # add prize-diff@t+3 + turns-to-first-attack auxiliary value heads
     deck_dim: int = 32           # deck_summary MLP width
     arch_dim: int = 16           # archetype embedding width
+    # --- v9 extensions; defaults keep the v5/v6 arch and state_dict keys byte-identical -------------
+    n_attn_layers: int = 1       # depth of the board self-attention stack
+    activation: str = "relu"     # "relu" (v5/v6) | "gelu" (v9) — used by every MLP and the attn FFN
+    norm_first: bool = False     # pre-norm transformer blocks (+ a final LayerNorm on the stack)
+
+
+def v9_config(**overrides) -> NetConfig:
+    """The v9 preset — sized for a ~300k-row corpus, not the 1M originally assumed.
+
+    Wider tokens (embed 64→128) and a deeper, pre-norm board encoder (1→2 layers, d_model 128→192,
+    GELU) with a wider state trunk (256→384). Deck conditioning + aux heads on.
+    """
+    cfg = dict(embed_dim=128, d_model=192, state_dim=384, n_heads=4, n_attn_layers=2,
+               activation="gelu", norm_first=True, deck_cond=True, aux_heads=True)
+    cfg.update(overrides)
+    return NetConfig(**cfg)
+
+
+def _act(cfg: NetConfig) -> nn.Module:
+    return nn.GELU() if cfg.activation == "gelu" else nn.ReLU()
 
 
 class _AttnPool(nn.Module):
@@ -63,42 +83,52 @@ class PTCGNet(nn.Module):
         self.card_embed = nn.Embedding(F.VOCAB_SIZE, cfg.embed_dim, padding_idx=F.PAD_ID)
 
         self.pk_in = nn.Linear(cfg.embed_dim + F.POKEMON_SCALAR_DIM, cfg.d_model)
-        self.pk_attn = nn.TransformerEncoderLayer(
-            cfg.d_model, cfg.n_heads, dim_feedforward=cfg.d_model * 2,
-            dropout=cfg.dropout, batch_first=True)
+
+        def _attn_layer():
+            return nn.TransformerEncoderLayer(
+                cfg.d_model, cfg.n_heads, dim_feedforward=cfg.d_model * 2,
+                dropout=cfg.dropout, batch_first=True,
+                activation=cfg.activation, norm_first=cfg.norm_first)
+
+        # Layer 1 stays `pk_attn` (not a ModuleList) so v5/v6 checkpoints keep loading by key;
+        # v9's extra depth lives in `pk_attn_rest`, which those checkpoints simply don't have.
+        self.pk_attn = _attn_layer()
+        self.pk_attn_rest = nn.ModuleList(_attn_layer() for _ in range(max(0, cfg.n_attn_layers - 1)))
+        # pre-norm stacks need a final LayerNorm; post-norm (v5/v6) already ends normalized
+        self.pk_norm = nn.LayerNorm(cfg.d_model) if cfg.norm_first else nn.Identity()
         self.board_pool = _AttnPool(cfg.d_model)
 
         self.hand_in = nn.Linear(cfg.embed_dim, cfg.d_model)
         self.hand_pool = _AttnPool(cfg.d_model)
 
         self.global_mlp = nn.Sequential(
-            nn.Linear(F.GLOBAL_DIM, cfg.g_dim), nn.ReLU(), nn.Linear(cfg.g_dim, cfg.g_dim), nn.ReLU())
+            nn.Linear(F.GLOBAL_DIM, cfg.g_dim), _act(cfg), nn.Linear(cfg.g_dim, cfg.g_dim), _act(cfg))
 
         # schema-v2 deck conditioning: own-deck summary MLP + archetype embedding → widen state input
         state_in = cfg.d_model * 2 + cfg.embed_dim + cfg.g_dim
         if cfg.deck_cond:
             self.deck_mlp = nn.Sequential(
-                nn.Linear(F.DECK_SUMMARY_DIM, cfg.deck_dim), nn.ReLU(),
-                nn.Linear(cfg.deck_dim, cfg.deck_dim), nn.ReLU())
+                nn.Linear(F.DECK_SUMMARY_DIM, cfg.deck_dim), _act(cfg),
+                nn.Linear(cfg.deck_dim, cfg.deck_dim), _act(cfg))
             self.arch_embed = nn.Embedding(F.ARCHETYPE_VOCAB, cfg.arch_dim)
             state_in += cfg.deck_dim + cfg.arch_dim
 
         self.state_mlp = nn.Sequential(
-            nn.Linear(state_in, cfg.state_dim), nn.ReLU(),
-            nn.Linear(cfg.state_dim, cfg.state_dim), nn.ReLU())
+            nn.Linear(state_in, cfg.state_dim), _act(cfg),
+            nn.Linear(cfg.state_dim, cfg.state_dim), _act(cfg))
 
         self.opt_in = nn.Linear(cfg.embed_dim + F.OPTION_SCALAR_DIM, cfg.d_model)
         self.policy_scorer = nn.Sequential(
-            nn.Linear(cfg.d_model + cfg.state_dim, cfg.d_model), nn.ReLU(),
+            nn.Linear(cfg.d_model + cfg.state_dim, cfg.d_model), _act(cfg),
             nn.Linear(cfg.d_model, 1))
         self.value_head = nn.Sequential(
-            nn.Linear(cfg.state_dim, cfg.d_model), nn.ReLU(), nn.Linear(cfg.d_model, 1))
+            nn.Linear(cfg.state_dim, cfg.d_model), _act(cfg), nn.Linear(cfg.d_model, 1))
         # auxiliary value heads (training-only; inference reads only value_head/policy_scorer)
         if cfg.aux_heads:
             self.prize_head = nn.Sequential(
-                nn.Linear(cfg.state_dim, cfg.d_model), nn.ReLU(), nn.Linear(cfg.d_model, 1))
+                nn.Linear(cfg.state_dim, cfg.d_model), _act(cfg), nn.Linear(cfg.d_model, 1))
             self.tta_head = nn.Sequential(
-                nn.Linear(cfg.state_dim, cfg.d_model), nn.ReLU(), nn.Linear(cfg.d_model, 1))
+                nn.Linear(cfg.state_dim, cfg.d_model), _act(cfg), nn.Linear(cfg.d_model, 1))
 
     def encode_state(self, b: dict) -> torch.Tensor:
         pk = torch.cat([self.card_embed(b["pokemon_ids"]), b["pokemon_scalars"]], dim=-1)
@@ -112,6 +142,9 @@ class PTCGNet(nn.Module):
         is_col0 = torch.arange(pad.shape[1], device=pad.device) == 0   # [N] True only at slot 0
         pad = pad & ~(all_pad & is_col0.unsqueeze(0))          # unmask slot 0 on all-padded rows
         pk = self.pk_attn(pk, src_key_padding_mask=pad)
+        for layer in self.pk_attn_rest:                             # v9 depth (empty for v5/v6)
+            pk = layer(pk, src_key_padding_mask=pad)
+        pk = self.pk_norm(pk)
         board = self.board_pool(pk, b["pokemon_mask"])              # [B,d]
 
         hand = self.hand_in(self.card_embed(b["hand_ids"]))
