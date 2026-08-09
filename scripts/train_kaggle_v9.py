@@ -83,7 +83,11 @@ def main() -> int:
     ap.add_argument("--card-features", default=None, help="card_features.npz (auto-discovered)")
     ap.add_argument("--src", default=None, help="dir containing the `nn` package (auto-discovered)")
     ap.add_argument("--out-dir", default="/kaggle/working" if ON_KAGGLE else "/tmp/v9run")
-    ap.add_argument("--epochs", type=int, default=40)
+    ap.add_argument("--epochs", type=int, default=40, help="ceiling; early stopping usually ends it sooner")
+    ap.add_argument("--patience", type=int, default=5,
+                    help="stop after this many epochs with no held-out top-1 improvement (0 = off)")
+    ap.add_argument("--min-delta", type=float, default=0.0,
+                    help="held-out top-1 must improve by more than this to reset patience")
     ap.add_argument("--batch", type=int, default=256)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--weight-decay", type=float, default=1e-4)
@@ -143,7 +147,7 @@ def main() -> int:
         print("  WARN: buffer has no aux targets — aux heads will train on zeros")
 
     opt = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    start_ep, best = 1, -1.0
+    start_ep, best, stale, stopped_early = 1, -1.0, 0, False
     last_path = os.path.join(args.out_dir, "v9_last.pt")
     best_path = os.path.join(args.out_dir, "v9_best.pt")
     hist_path = os.path.join(args.out_dir, "v9_history.json")
@@ -153,8 +157,10 @@ def main() -> int:
         net.load_state_dict(ck["model"])
         opt.load_state_dict(ck["optim"])
         start_ep, best = ck["epoch"] + 1, ck.get("best", -1.0)
+        stale = ck.get("stale", 0)          # patience must survive a killed session, not reset to 0
         history = ck.get("history", [])
-        print(f"resumed from {last_path} at epoch {start_ep} (best held-out top1 {best:.4f})")
+        print(f"resumed from {last_path} at epoch {start_ep} (best held-out top1 {best:.4f}, "
+              f"{stale}/{args.patience} epochs stale)")
 
     def batches(idx, shuffle, rng=None):
         order = idx.copy()
@@ -217,6 +223,10 @@ def main() -> int:
         rng.choice(tr, args.train_metric_rows, replace=False)
 
     def report(ep, tm, vm, extra=""):
+        # GAP = train - held-out, its own column on both headline metrics. #72 and #73 each turned
+        # on this number (0.871 -> 0.660 and 0.85 -> 0.59); it should be impossible to miss here.
+        gap_top1 = tm["policy_top1"] - vm["policy_top1"]
+        gap_auc = tm["value_auc"] - vm["value_auc"]
         print(f"ep {ep:3d} | CE  train {tm['policy_ce']:.4f}  held-out {vm['policy_ce']:.4f}"
               f"   | MSE train {tm['value_mse']:.4f}  held-out {vm['value_mse']:.4f}"
               f"   | aux train {tm['aux_mse']:.4f}  held-out {vm['aux_mse']:.4f}")
@@ -224,10 +234,11 @@ def main() -> int:
         v_ok = "PASS" if vm["value_auc"] > VALUE_GATE else "fail"
         v_ok2 = "PASS" if vm["value_auc"] > vm["prize_auc"] else "fail"
         print(f"        | top1 train {tm['policy_top1']:.4f}  held-out {vm['policy_top1']:.4f}"
-              f"  vs gate {POLICY_GATE:.3f} [{p_ok}]")
+              f"  GAP {gap_top1:+.4f}  vs gate {POLICY_GATE:.3f} [{p_ok}]")
         print(f"        | AUC  train {tm['value_auc']:.4f}  held-out {vm['value_auc']:.4f}"
-              f"  vs gate {VALUE_GATE:.3f} [{v_ok}]"
+              f"  GAP {gap_auc:+.4f}  vs gate {VALUE_GATE:.3f} [{v_ok}]"
               f"  vs prize-diff here {vm['prize_auc']:.4f} [{v_ok2}]{extra}")
+        return {"gap_policy_top1": gap_top1, "gap_value_auc": gap_auc}
 
     print(f"\ntrain metrics on {len(tr_metric_idx):,} sampled train rows; held-out on all {len(va):,}. "
           f"No metric is reported without its pair (#72/#73).")
@@ -256,18 +267,21 @@ def main() -> int:
             run_mse += mse.item() * len(b)
             seen += len(b)
         tm, vm = metrics(tr_metric_idx), metrics(va)
-        report(ep, tm, vm, f"   [{time.time()-t1:.0f}s]")
+        gaps = report(ep, tm, vm, f"   [{time.time()-t1:.0f}s]")
 
-        row = {"epoch": ep, "train": tm, "held_out": vm,
+        row = {"epoch": ep, "train": tm, "held_out": vm, **gaps,
                "train_loss_ce": run_ce / max(seen, 1), "train_loss_mse": run_mse / max(seen, 1)}
         history.append(row)
         # update `best` BEFORE writing v9_last: a resume reads it back, and a stale value would let
         # a later, worse epoch clear the bar and overwrite a better v9_best.
-        improved = vm["policy_top1"] > best
+        improved = vm["policy_top1"] > best + args.min_delta
         if improved:
             best = vm["policy_top1"]
+            stale = 0
+        else:
+            stale += 1
         state = {"model": net.state_dict(), "optim": opt.state_dict(), "config": vars(cfg),
-                 "epoch": ep, "best": best, "history": history}
+                 "epoch": ep, "best": best, "stale": stale, "history": history}
         torch.save(state, last_path)                 # EVERY epoch — a killed session resumes here
         if improved:
             torch.save(state, best_path)
@@ -275,9 +289,23 @@ def main() -> int:
         with open(hist_path, "w") as fh:
             json.dump(history, fh, indent=2)
 
+        if args.patience > 0 and stale >= args.patience:
+            stopped_early = True
+            print(f"\nEARLY STOP: held-out top-1 has not improved for {stale} epochs "
+                  f"(patience {args.patience}); best {best:.4f} at epoch "
+                  f"{max(history, key=lambda r: r['held_out']['policy_top1'])['epoch']}. "
+                  f"Ceiling was {args.epochs}.")
+            break
+        if not improved:
+            print(f"        . no improvement ({stale}/{args.patience} toward early stop)")
+
     if history:
-        fin = max(history, key=lambda r: r["held_out"]["policy_top1"])["held_out"]
-        print(f"\n=== GATES (held-out, best epoch by top-1) ===")
+        top = max(history, key=lambda r: r["held_out"]["policy_top1"])
+        fin = top["held_out"]
+        print(f"\n=== GATES (held-out, best epoch {top['epoch']} of {history[-1]['epoch']} run"
+              f"{', early-stopped' if stopped_early else ''}) ===")
+        print(f"GAP at that epoch: top-1 {top['gap_policy_top1']:+.4f}, AUC {top['gap_value_auc']:+.4f} "
+              f"(train − held-out)")
         print(f"policy top-1 {fin['policy_top1']:.4f} vs {POLICY_GATE:.3f} "
               f"-> {'PASS' if fin['policy_top1'] > POLICY_GATE else 'FAIL'}")
         print(f"value AUC    {fin['value_auc']:.4f} vs {VALUE_GATE:.3f} (#73 cross-run) "
