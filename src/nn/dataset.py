@@ -53,7 +53,15 @@ def policy_targets(visits: np.ndarray) -> tuple[np.ndarray, float]:
 
 
 def load_buffer(buffer_dir: str) -> Buffer:
-    """Concatenate every `.npz` shard in `buffer_dir` into one training buffer."""
+    """Concatenate every `.npz` shard in `buffer_dir` into one training buffer.
+
+    Grouping for the GAME-level split comes from the recorded `game_id` column when the shards
+    carry one, and falls back to the file index for older buffers that don't. That distinction is
+    load-bearing for a *packed* corpus (many games in one .npz — see `scripts/pack_corpus.py`):
+    keying on the file index there would collapse every game into one group and let correlated
+    decisions leak across the train/val boundary, which is the exact thing `split_by_game` exists
+    to prevent. One-game-per-shard buffers are unaffected — the two keys agree 1:1.
+    """
     paths = sorted(glob.glob(os.path.join(buffer_dir, "*.npz")))
     if not paths:
         raise FileNotFoundError(f"no .npz shards in {buffer_dir}")
@@ -66,11 +74,13 @@ def load_buffer(buffer_dir: str) -> Buffer:
             continue
         for k in d.files:
             cols[k].append(d[k])
-        gid.append(np.full(m, i, dtype=np.int32))
+        gid.append(d["game_id"].astype(np.int64) if "game_id" in d.files
+                   else np.full(m, i, dtype=np.int64))
     data = {k: np.concatenate(v) for k, v in cols.items()}
     pi, dropped = policy_targets(data["visits"])
-    return Buffer(data=data, pi=pi, game_id=np.concatenate(gid),
-                  n_games=len(paths), dropped_pass_mass=dropped)
+    game_id = np.concatenate(gid)
+    return Buffer(data=data, pi=pi, game_id=game_id,
+                  n_games=int(len(np.unique(game_id))), dropped_pass_mass=dropped)
 
 
 def merge_buffers(*bufs: Buffer) -> Buffer:
@@ -86,12 +96,12 @@ def merge_buffers(*bufs: Buffer) -> Buffer:
     data = {k: np.concatenate([b.data[k] for b in bufs]) for k in common}
     gids, off = [], 0
     for b in bufs:
-        gids.append(b.game_id + off)
-        off += b.n_games
+        gids.append(b.game_id.astype(np.int64) + off)
+        off += int(b.game_id.max()) + 1 if len(b.game_id) else 0   # ids are recorded, not 0..n-1
     game_id = np.concatenate(gids)
     pi, dropped = policy_targets(data["visits"])
     return Buffer(data=data, pi=pi, game_id=game_id,
-                  n_games=sum(b.n_games for b in bufs), dropped_pass_mass=dropped)
+                  n_games=int(len(np.unique(game_id))), dropped_pass_mass=dropped)
 
 
 def split_by_game(buf: Buffer, val_frac: float, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
