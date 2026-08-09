@@ -171,6 +171,11 @@ def main() -> int:
     cfg = NetConfig(**ck["config"]) if isinstance(ck.get("config"), dict) else NetConfig()
     net = PTCGNet(cfg).eval()
     net.load_state_dict(ck["model"])
+    # v9: collapse e_c = W @ attr(c) + r_c into a plain [VOCAB, embed] table. Mathematically
+    # identical, keeps the graph's single Gather, and leaves the card attributes out of the bundle.
+    if getattr(cfg, "compositional_embed", False):
+        net.materialize_card_embed()
+        print("materialized compositional card embedding → plain table (no card data in the graph)")
     deck_cond = bool(getattr(cfg, "deck_cond", False))
     print(f"exporting {'deck-conditioned (v2)' if deck_cond else 'v1'} net → {out_dir}")
 
