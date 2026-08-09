@@ -53,10 +53,14 @@ class NetConfig:
 def v9_config(**overrides) -> NetConfig:
     """The v9 preset — sized for a ~300k-row corpus, not the 1M originally assumed.
 
-    Wider tokens (embed 64→128) and a deeper, pre-norm board encoder (1→2 layers, d_model 128→192,
+    Wider tokens (embed 64→128) and a deeper, pre-norm board encoder (1→2 layers, d_model 128→160,
     GELU) with a wider state trunk (256→384). Deck conditioning + aux heads on.
+
+    ~1.14M params (1.02M at inference — the aux heads are training-only), which is the band this
+    corpus supports. d_model is 160 rather than 192 purely to land there: at 192 the same shape
+    costs 1.42M/1.28M.
     """
-    cfg = dict(embed_dim=128, d_model=192, state_dim=384, n_heads=4, n_attn_layers=2,
+    cfg = dict(embed_dim=128, d_model=160, state_dim=384, n_heads=4, n_attn_layers=2,
                activation="gelu", norm_first=True, deck_cond=True, aux_heads=True,
                compositional_embed=True, n_residual_cards=40)
     cfg.update(overrides)
