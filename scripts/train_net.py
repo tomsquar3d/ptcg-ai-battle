@@ -49,15 +49,25 @@ def make_batch(buf: D.Buffer, idx: np.ndarray, device: str, deck_cond: bool):
     return bd, pi, z
 
 
-def aux_loss(aux: dict, tgt: dict) -> torch.Tensor:
-    """MSE of the auxiliary heads against their targets (docs §3d step 4)."""
+def aux_loss(aux: dict, tgt: dict, include_bc: bool = False) -> torch.Tensor:
+    """MSE of the auxiliary heads against their targets (docs §3d step 4).
+
+    BC rows carry fabricated outcomes, so their prize-diff@t+3 / turns-to-attack targets are not
+    real supervision — #56 rooted a whole failed generation in exactly this kind of poisoning, and
+    `--mask-bc-value` already guards the main value head against it. `aux_targets` has always
+    returned `is_bc` for this purpose; nothing consumed it until now.
+    """
     mse = torch.nn.functional.mse_loss
-    return mse(aux["prize_diff_t3"], tgt["prize_diff_t3"]) + mse(aux["turns_to_attack"], tgt["turns_to_attack"])
+    keep = torch.ones_like(tgt["is_bc"]) if include_bc else ~tgt["is_bc"]
+    if not bool(keep.any()):
+        return aux["prize_diff_t3"].sum() * 0.0        # keep the graph, contribute no gradient
+    return (mse(aux["prize_diff_t3"][keep], tgt["prize_diff_t3"][keep])
+            + mse(aux["turns_to_attack"][keep], tgt["turns_to_attack"][keep]))
 
 
 @torch.no_grad()
 def evaluate(net: PTCGNet, buf: D.Buffer, idx: np.ndarray, batch: int, device: str,
-             deck_cond: bool, aux_heads: bool) -> dict:
+             deck_cond: bool, aux_heads: bool, aux_include_bc: bool = False) -> dict:
     net.eval()
     src_all = buf.data.get("source")            # value metrics must EXCLUDE fake-z BC rows (source==1)
     tot_ce = tot_mse = tot_aux = 0.0
@@ -68,7 +78,7 @@ def evaluate(net: PTCGNet, buf: D.Buffer, idx: np.ndarray, batch: int, device: s
         logits, value, aux = net.forward_train(bd)
         tot_ce += policy_ce(logits, pi).item() * len(b)
         if aux_heads:
-            tot_aux += aux_loss(aux, D.aux_targets(buf, b, device)).item() * len(b)
+            tot_aux += aux_loss(aux, D.aux_targets(buf, b, device), aux_include_bc).item() * len(b)
         n += len(b)
         has_tgt = pi.sum(1) > 0
         if has_tgt.any():
@@ -108,6 +118,8 @@ def main() -> int:
     ap.add_argument("--deck-cond", action="store_true", help="v2: feed deck_summary + archetype_id")
     ap.add_argument("--aux-heads", action="store_true", help="v2: train prize/turns-to-attack aux heads")
     ap.add_argument("--aux-weight", type=float, default=0.5)
+    ap.add_argument("--aux-include-bc", action="store_true",
+                    help="train the aux heads on BC rows too (their aux targets are fabricated — off by default)")
     ap.add_argument("--bc-epochs", type=int, default=0,
                     help="v2: policy-only BC warmup epochs over SOURCE_BC (expert) rows before main training")
     ap.add_argument("--bc-buffer", default=None,
@@ -142,11 +154,6 @@ def main() -> int:
           f"| train {len(tr)} / val {len(va)} | dropped PASS mass {buf.dropped_pass_mass:.2%}")
     if buf.dropped_pass_mass > 0.05:
         print(f"  NOTE: {buf.dropped_pass_mass:.1%} of visit mass was PASS (dropped) — consider a PASS logit")
-    if args.deck_cond and not D.has_deck_cond(buf):
-        print("  WARN: --deck-cond set but buffer has no deck_summary (defaults to zeros)")
-    if args.aux_heads and not D.has_aux(buf):
-        print("  WARN: --aux-heads set but buffer has no aux targets (defaults to zeros)")
-
     if args.preset == "v9":
         cfg = v9_config()
         if args.card_features and os.path.exists(args.card_features):
@@ -164,6 +171,11 @@ def main() -> int:
               f"(L2 {args.residual_l2:g})")
     print(f"net: {net.num_params():,} params | preset={args.preset} deck_cond={cfg.deck_cond} "
           f"aux_heads={cfg.aux_heads} compositional={cfg.compositional_embed}")
+    # check the BUILT config, not the flags — a preset turns these on without the flag being set
+    if cfg.deck_cond and not D.has_deck_cond(buf):
+        print("  WARN: deck_cond is on but buffer has no deck_summary (defaults to zeros)")
+    if cfg.aux_heads and not D.has_aux(buf):
+        print("  WARN: aux_heads is on but buffer has no aux targets (defaults to zeros)")
     opt = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     rng = np.random.default_rng(args.seed)
 
@@ -213,7 +225,7 @@ def main() -> int:
                 mse = torch.nn.functional.mse_loss(value, z)
             loss = ce + args.value_weight * mse
             if cfg.aux_heads:
-                al = aux_loss(aux, D.aux_targets(buf, b, device))
+                al = aux_loss(aux, D.aux_targets(buf, b, device), args.aux_include_bc)
                 loss = loss + args.aux_weight * al
                 run_aux += al.item() * len(b)
             if cfg.compositional_embed and args.residual_l2 > 0:
