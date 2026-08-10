@@ -34,25 +34,50 @@ import time
 
 import numpy as np
 
-ON_KAGGLE = os.path.isdir("/kaggle/input")
-KAGGLE_IN = "/kaggle/input"
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)
+KAGGLE_IN = os.environ.get("KAGGLE_INPUT_DIR", "/kaggle/input")   # env override so discovery is testable
+ON_KAGGLE = os.path.isdir(KAGGLE_IN)
 
 POLICY_GATE = 0.720      # v6 / net_ladder2 held-out top-1 (#73)
 VALUE_GATE = 0.662       # prize-diff held-out AUC on #73's eval set
 PRIZE_DIFF_GLOBAL_IX = 4  # globals[4] = (opp_prizes - my_prizes)/6 — the #72 baseline feature
 
 
-def _find(*, contains: str = None, name: str = None, kind: str = "dir") -> str | None:
-    """Locate a corpus dir / file under /kaggle/input without hard-coding the dataset slug."""
+def _find_file(name: str) -> str | None:
+    """Locate a file by name anywhere under the Kaggle input mount (dataset slug not hard-coded)."""
     if not ON_KAGGLE:
         return None
-    for root, dirs, files in os.walk(KAGGLE_IN):
-        if kind == "file" and name in files:
+    for root, _dirs, files in os.walk(KAGGLE_IN):
+        if name in files:
             return os.path.join(root, name)
-        if kind == "dir" and contains and glob.glob(os.path.join(root, contains)):
+    return None
+
+
+def _find_pkg(pkg: str) -> str | None:
+    """Locate the parent dir of an importable package (e.g. `nn` -> the dir to put on sys.path)."""
+    if not ON_KAGGLE:
+        return None
+    for root, dirs, _files in os.walk(KAGGLE_IN):
+        if pkg in dirs and os.path.exists(os.path.join(root, pkg, "__init__.py")):
             return root
     return None
+
+
+def _find_corpus() -> str | None:
+    """Directory holding the training shards: the one with the MOST .npz files.
+
+    Not 'the first dir containing any .npz' — card_features.npz is uploaded alongside the corpus and
+    would win that race, and the run would then train on a one-file 'corpus' of card attributes.
+    """
+    if not ON_KAGGLE:
+        return None
+    best, best_n = None, 0
+    for root, _dirs, files in os.walk(KAGGLE_IN):
+        n = len([f for f in files if f.endswith(".npz") and f != "card_features.npz"])
+        if n > best_n:
+            best, best_n = root, n
+    return best
 
 
 def rankdata(x: np.ndarray) -> np.ndarray:
@@ -102,16 +127,19 @@ def main() -> int:
     ap.add_argument("--resume", action="store_true", help="continue from out-dir/v9_last.pt if present")
     args = ap.parse_args()
 
-    src = args.src or _find(contains="nn") or os.path.join(REPO, "src")
+    src = args.src or _find_pkg("nn") or os.path.join(REPO, "src")
     sys.path.insert(0, src)
     import torch                                                    # noqa: E402
     from nn.encoder import PTCGNet, v9_config                       # noqa: E402
     from nn import dataset as D                                     # noqa: E402
+    # train_net.py may sit next to this script (flat Kaggle layout) or in REPO/scripts (repo layout)
     sys.path.insert(0, os.path.join(REPO, "scripts"))
+    sys.path.insert(0, HERE)
     from train_net import policy_ce, aux_loss                       # noqa: E402
 
-    corpus = args.corpus or _find(contains="*.npz") or os.path.join(REPO, "experiments", "selfplay", "v9_corpus")
-    feats = (args.card_features or _find(name="card_features.npz", kind="file")
+    corpus = (args.corpus or _find_corpus()
+              or os.path.join(REPO, "experiments", "selfplay", "v9_packed"))
+    feats = (args.card_features or _find_file("card_features.npz")
              or os.path.join(REPO, "experiments", "checkpoints", "card_features.npz"))
     os.makedirs(args.out_dir, exist_ok=True)
     torch.manual_seed(args.seed)
