@@ -1,5 +1,18 @@
 # ptcg-ai-battle
+Overview
 
+A game-playing agent for the Pokémon TCG, a hard planning problem because of hidden information (opponent’s hand, deck order) and randomness.
+
+Approach
+
+Search: determinized PUCT Monte Carlo Tree Search. It samples plausible hidden states and searches over them, with a hook for neural-network move priors and leaf-value estimates.
+Learning: an AlphaZero-style loop: self-play data collection → replay buffer → policy/value network training in PyTorch.
+Deployment: the trained network is exported to ONNX and run with onnxruntime on CPU, so the submission runs without PyTorch under Kaggle’s 2-vCPU, 10-minute-per-player limits.
+Robustness: every move goes through a try/except plus a watchdog that falls back to a legal move, since a crash or timeout is an instant loss.
+
+Where to look: src/ (search, belief engine, policy), submissions/vN/ (final agent), experiments/log.md (experiment journal).
+
+Results: [final leaderboard rank, or win rate vs. the v0 random baseline over N self-play games]
 Solo entry for the Kaggle **Pokémon TCG AI Battle Challenge** (Simulation + Strategy
 categories) — an agent that plays the Pokémon Trading Card Game inside the organizers'
 "cabt" battle engine.
